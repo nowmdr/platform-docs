@@ -78,9 +78,10 @@
   тем же `path`/URL, что и без папки.
 - **Папки работают в разделах** media / products / posts / seo_posts — секции в
   `admin_folders`, у каждой контентной таблицы своя колонка `folder_id` (миграции
-  `add_admin_folders` для media, `add_content_folders` для products/posts —
-  ⚠️ файлы миграций ещё не продублированы в репозиторий сайта, см.
-  [schema.md](../database/schema.md) §6). У products/posts есть публичное чтение
+  `0021_admin_folders.sql` для media и `0022_content_folders.sql` для products/posts
+  в `cozycorner/supabase/migrations/`; применены 2026-07-16 через MCP под именами
+  `add_admin_folders`/`add_content_folders`, см. [schema.md](../database/schema.md)
+  §6). У products/posts есть публичное чтение
   (сайт) — `folder_id` виден anon-выборкам; это просто uuid без чувствительных
   данных, принято осознанно.
 - **Хранение**: одна generic-таблица `<schema>.admin_folders` (`id, created_at, section,

@@ -38,6 +38,9 @@
 - **SEO Posts (2026-07-16)**: `posts.post_type` (миграция `add_seo_post_type`),
   разделы Blog и SEO Posts на одних компонентах (конфиг `sections.ts`), маршруты
   `/:siteSlug/seo-posts`, папки-секция `seo_posts`. Правила — [blog.md](blog.md) §1a.
+- **Дубли MCP-миграций папок в репо сайта (2026-07-17)**: `0021_admin_folders.sql` +
+  `0022_content_folders.sql` в `cozycorner/supabase/migrations/` — схемный дрейф
+  закрыт (см. [../database/schema.md](../database/schema.md) §6).
 
 ## Отклонения от спеки (актуальные версии инструментов)
 
@@ -59,18 +62,15 @@
 
 ## Следующие шаги
 
-1. **Продублировать в репо сайта файлы миграций** `add_admin_folders` и
-   `add_content_folders` (применены к base-one только через MCP — схемный дрейф,
-   см. [../database/schema.md](../database/schema.md) §6).
-2. Ручные e2e-чек-листы (после переезда media/products в основном проверены):
+1. Ручные e2e-чек-листы (после переезда media/products в основном проверены):
    - blog — `../archive/web.admin/superpowers/plans/2026-07-10-blog.md` Task 6.1;
    - pages — `…/2026-07-10-pages.md` Task 5.3;
    - папки Media — `…/2026-07-16-media-folders.md` Task 6.3 (регресс после
      рефакторинга — важно);
    - папки Products/Blog — `…/2026-07-16-content-folders.md` Task 6.5;
    - SEO Posts — `…/2026-07-16-seo-posts.md` Task 11.
-3. Фаза 3 дальше: **categories → footer_settings** (CRUD в админке).
-4. От пользователя:
+2. Фаза 3 дальше: **categories → footer_settings** (CRUD в админке).
+3. От пользователя:
    - удалить старый Supabase-проект `nkaobsivfzsjqypuaamw` (этап G) + его
      MCP-сервер из `~/.claude.json`;
    - прод-URL админки добавить в base-one → Auth → URL Configuration (нужно для
