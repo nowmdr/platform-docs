@@ -3,6 +3,7 @@
 ## Projects in this workspace
 - `platform-docs/` — shared documentation (this project)
 - `cozycorner/` — public catalog site for cozy home goods (Next.js 16 App Router + Supabase)
+- `avocado.kiss/` — culinary recipe magazine (Next.js 16 App Router + Supabase)
 - `web.admin/` — multi-site admin panel for managing site content (Vite + React SPA + Supabase)
 
 ## Documentation index
@@ -20,6 +21,7 @@ Read these files only when the task requires it:
 | Admin status & roadmap | platform-docs/admin-panel/status.md | Planning admin work; checking pending tasks |
 | Sites overview | platform-docs/sites/overview.md | Starting work on any public-facing site |
 | CozyCorner architecture | platform-docs/sites/cozycorner.md | Any work in the cozycorner repo |
+| Avocado Kiss architecture | platform-docs/sites/avocado-kiss.md | Any work in the avocado.kiss repo |
 | Coding standards | platform-docs/methodology/coding-standards.md | New files, refactoring, code review |
 
 ## Workflow rules
