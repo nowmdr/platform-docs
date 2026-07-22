@@ -1,6 +1,6 @@
 # Раздел Products — правила и концепции
 
-> Last updated: 2026-07-17 | Source project: web.admin (docs/products.md) — пути `src/…` относятся к репозиторию `web.admin/`
+> Last updated: 2026-07-22 | Source project: web.admin (docs/products.md) — пути `src/…` относятся к репозиторию `web.admin/`
 
 Документ фиксирует, как устроен раздел Products админки: контракты с данными,
 поведение операций и решения по UI, принятые в ходе разработки (2026-07-10,
@@ -66,12 +66,13 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
 
 ### Папки
 
-- Слева от списка — панель папок (`FoldersPanel`), в строках — чекбоксы
-  multi-select и иконка Move (`MoveToFolderMenu`), над списком — bulk-бар
-  «N selected · Move to… · Delete · Clear» (delete — `BulkDeleteButton` +
-  `useBulkDelete`, confirm-диалог). Канонические правила и контракты папок —
-  [media.md](media.md) §3 (общий код — `src/features/folders/`, хук
-  `useFolders`, секция `'products'` в `admin_folders`).
+- Слева от списка — панель папок (`FoldersPanel`), иконка Move в строке
+  (`MoveToFolderMenu`). Множественный выбор — через **режим выбора** (кнопка
+  **Select** в тулбаре; чекбоксов по умолчанию нет): панель bulk-действий
+  `SelectionBar` встаёт на место строки поиска/фильтров, чекбоксы появляются в
+  строках, Cancel выходит и очищает выбор. Общий паттерн — [components.md](components.md)
+  §4. Канонические правила и контракты папок — [media.md](media.md) §3 (общий код —
+  `src/features/folders/`, хук `useFolders`, секция `'products'` в `admin_folders`).
 - `folder_id` есть **ТОЛЬКО** в списочном типе `ProductListItem` — в
   `Product`/`ProductInput` его нет: редактор и payload'ы create/update поле не
   трогают, новые товары попадают в Unsorted.
@@ -106,8 +107,12 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   bg-background`) — слева Back, справа Save и Delete. Save вынесен из
   `<form>`: сабмит через `id="product-form"` + атрибут `form="product-form"`
   на кнопке. Грид-шапка `md:grid-cols-[16rem_1fr]` — превью image + slug
-  слева, Title/Price+Brand/Image path+Gallery справа; ниже на всю ширину
-  `max-w-3xl` — Referral URL, Category+Image style, Description, SEO.
+  слева; справа Title, ряд Price + Image path+Gallery (`grid-cols-[8rem_1fr]` —
+  Price узкий, `type=text inputMode=decimal` без спиннеров), затем Referral URL;
+  ниже на всю ширину `max-w-4xl` — ряд Category + Brand, Description, SEO
+  (2026-07-22: Brand переехал сюда с ряда Price, Referral URL поднялся в шапку).
+  **Image style убран из вёрстки** — поле, схема и `toInput` не тронуты (для
+  новых товаров дефолт `cutout`, у существующих — сохранённое значение).
   Невалидный Save — тост с КОНКРЕТНЫМ сообщением первого невалидного поля
   (`firstFieldErrorMessage` из `src/lib/errors.ts`; фолбэк «Please fix the highlighted
   fields»). Ошибки мутаций — через `humanizeError` (см. [components.md](components.md) §4).

@@ -1,6 +1,6 @@
 # Админ-панель — контракт доступа к данным
 
-> Last updated: 2026-07-17 | Source project: web.admin (CLAUDE.md, docs/admin-app-spec.md §5–§9, docs/media-manager.md) — пути `src/…` относятся к репозиторию `web.admin/`
+> Last updated: 2026-07-22 | Source project: web.admin (CLAUDE.md, docs/admin-app-spec.md §5–§9, docs/media-manager.md) — пути `src/…` относятся к репозиторию `web.admin/`
 
 У админки нет своего сервера и REST API — «API» это прямой доступ к Supabase
 (PostgREST + Storage) под RLS. Модель данных — [../database/schema.md](../database/schema.md).
@@ -41,6 +41,15 @@ localStorage. Файлы — `storage.from(site.bucket)`.
 - Известный баг первого логина (исправлен, не регрессировать): после signIn сессию
   кладут в кэш TanStack (`setQueryData(['auth', projectUrl])`) ДО navigate — иначе
   гард видит устаревшее «нет сессии» и возвращает на /login.
+- Ложный «Access denied» при возврате во вкладку (исправлен 2026-07-22, не
+  регрессировать): в фоне тормозятся таймеры, `autoRefreshToken` не успевает, и
+  focus-refetch auth-запроса гонялся с обновлением токена → RPC `is_admin` с
+  протухшим JWT → `false` → экран Access denied (перезагрузка чинила). Фикс:
+  (1) `isAdmin` при ошибке RPC **бросает**, а не возвращает `false` (транзиентный
+  сбой ≠ «не в whitelist»; при фоновом refetch RQ держит последнее хорошее значение);
+  (2) auth-запрос в `RequireAuth` — `refetchOnWindowFocus: false` + `staleTime: Infinity`,
+  свежесть только через `onAuthStateChange` (refetch на TOKEN_REFRESHED/SIGNED_IN/OUT —
+  уже с валидным токеном).
 - **Запись в БД/Storage работает только под сессией админа** (RLS + `is_admin()`).
   Service-role ключа в админке нет и не должно быть никогда.
 

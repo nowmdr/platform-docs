@@ -81,6 +81,22 @@
     показывает конкретное поле вместо «Fix validation errors») — в формах Product/Post/
     Page/Category; `humanizeError` (23505 дубликат имени и пр.) — в taxonomy-мутациях.
   - `TaxonomyConfig.plural` — корректное мн. число в текстах (categories, не «categorys»).
+- **Полиш формы товара + режим выбора + фикс auth (2026-07-22)** — только фронт,
+  без изменений схемы:
+  - **Форма товара** ([components.md](components.md) §3.7, [products.md](products.md) §3):
+    Price — узкий инпут `grid-cols-[8rem_1fr]`, `type=text inputMode=decimal` (без
+    спиннеров); ряды пересобраны — Price+Image path и Referral URL в шапке, Category+Brand
+    ниже; **Image style убран из вёрстки** (поле/схема/`toInput` целы, дефолт новых
+    товаров `cutout`); контейнер `max-w-3xl` → `max-w-4xl`.
+  - **Режим выбора** во всех разделах (media/products/posts) вместо всегда-видимых
+    чекбоксов: кнопка **Select** → `selectionMode` (в `useFolders`), общий `SelectionBar`
+    встаёт на место строки фильтров (без вертикального сдвига), Cancel очищает выбор.
+    Плюс **Shift-выбор диапазона** (`selectRange` с якорем). Детали — [components.md](components.md) §4.
+  - **Ложный «Access denied» при возврате во вкладку** — гонка focus-refetch ×
+    обновление токена. Фикс: `isAdmin` бросает вместо `return false`; auth-запрос
+    `refetchOnWindowFocus:false` + `staleTime:Infinity` (свежесть через
+    `onAuthStateChange`). Детали — [api.md](api.md) §3.
+  - Мелочь: пункты поповера `TaxonomyCombobox` — `cursor-pointer` + единый инсет.
 
 ## Отклонения от спеки (актуальные версии инструментов)
 
