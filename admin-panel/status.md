@@ -54,6 +54,33 @@
     hero bg); сам ведёт broken-состояние. У hero-секций превью раньше не было.
   - Код-ревью (память/эффективность): мемоизация counts/visible в пикере, убран
     двойной `form.watch` в hero, дедуп трёх мутаций удаления в `useBulkDelete`.
+- **Полиш layout + унификация модалок (2026-07-22)** — только фронт (спека/план
+  `../archive/web.admin/superpowers/{specs,plans}/2026-07-22-admin-dialog-layout-polish*`):
+  контейнер `max-w-5xl` → `max-w-7xl`; примитив `ui/dialog.tsx` — flex-колонка +
+  `max-h-[85svh]` + новый `DialogBody` (скролл-середина), на него переведены
+  ImagePicker/ProductPicker/MediaDetails; кольцо выбранной картинки `ring-ring` →
+  `ring-primary`; скроллбар пикера товаров больше не перекрывает чек-индикаторы.
+- **Унификация Category & Brand (2026-07-22)** — БД + фронт (спека/план
+  `../archive/web.admin/superpowers/{specs,plans}/2026-07-22-category-brand-unification*`):
+  таблица `brands` (миграция 0023, сид из `products.brand`, RLS public read + admin
+  write); `src/lib/categories.ts` + `src/lib/brands.ts` (CRUD + reorder + каскад
+  rename/delete в products, app-level); generic `src/features/taxonomy/`
+  (`config` + `TaxonomyManager` + `TaxonomyCombobox`); разделы Categories/Brands в
+  навигации; в форме товара Brand/Category — единый combobox (выбор/создание +
+  Manage); фильтр Brand в списке — из справочника. Известные хвосты: каскад не
+  атомарен (2 запроса); hero_badge/hero_image_path категорий в админке не редактируются.
+- **Доработки taxonomy по ревью (2026-07-22)** — только фронт (план
+  `../archive/web.admin/superpowers/plans/2026-07-22-taxonomy-ux-refinement-plan.md`):
+  - Списки Categories/Brands приведены к простому borderless-виду как Products/Blog
+    (кликабельная зона + иконки-соседи), New + поиск сверху, reorder **оптимистичный**
+    (мгновенно в UI, запись `Promise.all`; при поиске стрелки отключены).
+  - Category — редактирование в модалке `CategoryEditDialog` (create+edit, «средний»
+    набор: image_path через **инпут+Gallery** по контракту товара, name, hero_title,
+    hero_description, SEO с живым фолбэком; клик по ряду открывает). Brand — inline-rename.
+  - **Релевантные ошибки** (`src/lib/errors.ts`): `firstFieldErrorMessage` (тост
+    показывает конкретное поле вместо «Fix validation errors») — в формах Product/Post/
+    Page/Category; `humanizeError` (23505 дубликат имени и пр.) — в taxonomy-мутациях.
+  - `TaxonomyConfig.plural` — корректное мн. число в текстах (categories, не «categorys»).
 
 ## Отклонения от спеки (актуальные версии инструментов)
 

@@ -14,7 +14,10 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
 
 - **Слой данных — `src/lib/products.ts`**: `listProducts` (облегчённый select
   `id,title,created_at,brand,category,image_path,folder_id` для списка), `getProduct`, `createProduct`,
-  `updateProduct`, `deleteProduct`, `listCategoryNames`. Всё через `getDb(site)` —
+  `updateProduct`, `deleteProduct`. Справочники category/brand — отдельные модули
+  `src/lib/categories.ts` и `src/lib/brands.ts` (list/create/rename/delete/reorder, у
+  категории ещё `updateCategoryImage`); `rename`/`delete` каскадят в `products` на уровне
+  приложения (FK нет — не атомарно, осознанное упрощение). Всё через `getDb(site)` —
   схема активного сайта, RLS-запись только под админом.
 - **slug не редактируется в админке.** БД-триггер `products_set_slug`
   (BEFORE INSERT OR UPDATE) генерирует slug из title, если он пуст; при create
@@ -41,9 +44,11 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   текущими title/description БЕЗ пометки формы dirty, Use defaults очищает
   (`shouldDirty: true` — сравнение с defaults, лишнего dirty не будет).
 - **Пустые optional-поля всегда `null`**, не пустые строки (`orNull` в `toInput`).
-- **`category` товара = `categories.name`** (текст, не FK) — редактируется только
-  Select'ом из справочника + пункт None (сентинел `__none__`: radix SelectItem
-  не принимает пустое value; тот же приём — `__all__` в фильтрах списка).
+- **`category`/`brand` товара = `categories.name`/`brands.name`** (текст, не FK).
+  Оба редактируются единым `TaxonomyCombobox` (`src/features/taxonomy/`): выбор
+  существующего, создание нового на месте, пункт None (пустая строка → `null` в
+  `toInput`), вход в полное управление (Manage…). Brand больше не free-text —
+  таблица `brands` (миграция 0023).
 
 ## 2. Список (`src/features/products/ProductsPage.tsx`)
 
@@ -52,9 +57,10 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   товаров timestamps совпадают пачками, без tiebreaker'а порядок нестабилен.
   Не убирать.
 - Поиск (по title, `useDeferredValue`-паттерн из MediaPage) + фильтры **Brand,
-  затем Category** (порядок как в строке товара): бренды — уникальные из
-  загруженных товаров, категории — полный справочник `listCategoryNames`
-  (query `['categories', site.slug]`, общий с формой). Фильтрация клиентская
+  затем Category** (порядок как в строке товара): бренды — полный справочник
+  `listBrands` (query `['brands', site.slug]`), категории — полный справочник
+  `listCategories` (query `['categories', site.slug]`, общий с формой/менеджером).
+  Фильтрация клиентская
   (товаров десятки), условия по AND; счётчик `видимые / все` при активном
   фильтре; ghost-кнопка Clear сбрасывает всё.
 
@@ -102,8 +108,9 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   на кнопке. Грид-шапка `md:grid-cols-[16rem_1fr]` — превью image + slug
   слева, Title/Price+Brand/Image path+Gallery справа; ниже на всю ширину
   `max-w-3xl` — Referral URL, Category+Image style, Description, SEO.
-  Невалидный Save — тост `'Fix validation errors before saving'` (паттерн
-  поста, ранее был немым).
+  Невалидный Save — тост с КОНКРЕТНЫМ сообщением первого невалидного поля
+  (`firstFieldErrorMessage` из `src/lib/errors.ts`; фолбэк «Please fix the highlighted
+  fields»). Ошибки мутаций — через `humanizeError` (см. [components.md](components.md) §4).
 
 ## 4. Гард несохранённых изменений (важно для будущих CRUD-форм)
 
