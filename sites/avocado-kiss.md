@@ -7,7 +7,7 @@
 Кулинарный журнал (рецепты, английский UI): курируемая через `home_slots`
 главная, страницы рецептов, страницы категорий. **Next.js 16** (App Router,
 RSC) + Supabase + Vercel. Шрифт Fira Sans — self-hosted woff2 (лицензия OFL).
-Модель данных — [../database/schema.md](../database/schema.md) §5 (раздел
+Модель данных — [../database/schema.md](../database/schema.md) §9 (раздел
 avocado_kiss).
 
 > ⚠️ Это **не привычный Next.js** — версия с breaking changes. Перед написанием
@@ -46,7 +46,7 @@ lib/
                         # fetchPageSeo, fetchFooterSettings
   images.ts             # resolveRecipeImage() (контракт путей картинок)
   types.ts              # Recipe/Category/HomeSlot/PageSeo/FooterSettings, HOME_SLOTS
-supabase/migrations/    # единственное место изменения схемы БД (см. schema.md §6–7)
+supabase/migrations/    # единственное место изменения схемы БД (workflow — schema.md §7, история — §10)
 mockups/                # исходные SingleFile-макеты Lovable (home, recipe) — referencia для вёрстки
 ```
 
