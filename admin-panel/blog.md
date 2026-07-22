@@ -92,7 +92,8 @@ SEO Posts — 2026-07-16). Модель данных — [../database/schema.md]
 
 - Слева от списка — панель папок (`FoldersPanel`), в строках — чекбоксы
   multi-select и иконка Move (`MoveToFolderMenu`), над списком — bulk-бар
-  «N selected · Move to… · Clear». Канонические правила и контракты папок —
+  «N selected · Move to… · Delete · Clear» (delete — `BulkDeleteButton` +
+  `useBulkDelete`, confirm-диалог). Канонические правила и контракты папок —
   [media.md](media.md) §3 (общий код — `src/features/folders/`, хук
   `useFolders`, секция `'posts'` в `admin_folders`).
 - `folder_id` есть **ТОЛЬКО** в списочном типе `PostListItem` — в

@@ -1,6 +1,6 @@
 # Админ-панель — статус, отклонения от спеки, следующие шаги
 
-> Last updated: 2026-07-17 | Source project: web.admin (CLAUDE.md «Статус», сверено с фактическим состоянием репо cozycorner)
+> Last updated: 2026-07-22 | Source project: web.admin (CLAUDE.md «Статус», сверено с фактическим состоянием репо cozycorner)
 
 ## Сделано (хронология по фазам)
 
@@ -41,6 +41,19 @@
 - **Дубли MCP-миграций папок в репо сайта (2026-07-17)**: `0021_admin_folders.sql` +
   `0022_content_folders.sql` в `cozycorner/supabase/migrations/` — схемный дрейф
   закрыт (см. [../database/schema.md](../database/schema.md) §6).
+- **UX-доработки медиа-выбора (2026-07-22)** — только фронт, без изменений схемы
+  (спека/план `../archive/web.admin/superpowers/{specs,plans}/2026-07-22-picker-folders-bulk-delete-hover*`):
+  - **Фильтр папок в `ImagePickerDialog`** — Select All/Unsorted/папки, upload в
+    выбранную папку (пикер раньше папок не знал). Задействован в товарах, постах,
+    страницах и hero-секциях (media.md §3).
+  - **Bulk delete** во всех разделах (media/products/posts) — общий
+    `BulkDeleteButton` + хук `useBulkDelete`; для media confirm предупреждает о
+    занятых картинках. Дополняет прежний bulk move.
+  - **Hover-превью** во всех точках добавления картинки — общий
+    `ImagePreviewPicker` (ProductEditPage, PostEditPage cover, PageEditPage OG,
+    hero bg); сам ведёт broken-состояние. У hero-секций превью раньше не было.
+  - Код-ревью (память/эффективность): мемоизация counts/visible в пикере, убран
+    двойной `form.watch` в hero, дедуп трёх мутаций удаления в `useBulkDelete`.
 
 ## Отклонения от спеки (актуальные версии инструментов)
 

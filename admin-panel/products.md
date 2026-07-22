@@ -62,7 +62,8 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
 
 - Слева от списка — панель папок (`FoldersPanel`), в строках — чекбоксы
   multi-select и иконка Move (`MoveToFolderMenu`), над списком — bulk-бар
-  «N selected · Move to… · Clear». Канонические правила и контракты папок —
+  «N selected · Move to… · Delete · Clear» (delete — `BulkDeleteButton` +
+  `useBulkDelete`, confirm-диалог). Канонические правила и контракты папок —
   [media.md](media.md) §3 (общий код — `src/features/folders/`, хук
   `useFolders`, секция `'products'` в `admin_folders`).
 - `folder_id` есть **ТОЛЬКО** в списочном типе `ProductListItem` — в
@@ -84,9 +85,12 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   `['categories', site.slug]`.
 - Пикер картинок `ImagePickerDialog`: грид из `listImages` (query
   `['media', site.slug]` — ОБЩИЙ кэш с разделом Media, не заводить свой ключ),
-  поиск, Upload одного файла через `uploadImage` из `lib/media` (вся валидация
-  и откат там), выбранный/загруженный путь попадает в форму через
-  `setValue(..., { shouldDirty: true })`; в БД пишется только по Save.
+  фильтр по папкам (Select All/Unsorted/папки, слева от поиска), поиск (сквозь
+  все папки), Upload одного файла через `uploadImage` из `lib/media` (грузит в
+  выбранную папку; вся валидация и откат там), выбранный/загруженный путь
+  попадает в форму через `setValue(..., { shouldDirty: true })`; в БД — по Save.
+  Превью поля картинки в шапке редактора — `ImagePreviewPicker` с hover-кнопкой
+  Add/Change image (детали — [components.md](components.md) §3.7, §4).
 - Удаление — AlertDialog с предупреждением про продуктовые секции постов
   (точной проверки `post_product_sections.product_ids` нет — осознанное
   упрощение v1).
