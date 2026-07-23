@@ -5,7 +5,8 @@
 У админки нет своего сервера и REST API — «API» это прямой доступ к Supabase
 (PostgREST + Storage) под RLS. Модель данных — [../database/schema.md](../database/schema.md).
 Правила конкретных разделов — [media.md](media.md), [products.md](products.md),
-[blog.md](blog.md), [pages.md](pages.md); UI — [components.md](components.md).
+[blog.md](blog.md), [pages.md](pages.md), [subscribers.md](subscribers.md); UI —
+[components.md](components.md).
 
 ## 1. Реестр сайтов — `src/config/sites.ts`
 

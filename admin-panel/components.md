@@ -5,7 +5,7 @@
 Полное описание интерфейса: карта навигации, экраны, иерархия компонентов, паттерны
 взаимодействия и состояния. Дополняет [media.md](media.md) (правила раздела Media и
 папок), [products.md](products.md), [blog.md](blog.md), [pages.md](pages.md) и
-[api.md](api.md) (контракт с данными).
+[subscribers.md](subscribers.md) и [api.md](api.md) (контракт с данными).
 
 ## 1. Дизайн-система
 
@@ -48,6 +48,7 @@
 /:siteSlug/blog/new           — создание поста
 /:siteSlug/blog/:postId       — детальная страница поста (edit/delete)
 /:siteSlug/seo-posts{,/new,/:postId} — SEO-посты (те же компоненты, конфиг sections.ts)
+/:siteSlug/subscribers        — подписчики рассылки (список + экспорт CSV + удаление)
 *                             — redirect → /dashboard
 ```
 
@@ -104,7 +105,7 @@ RequireAuth (guard: сессия + is_admin)
 - Двухколоночный flex: слева фиксированное меню `w-44`, справа контент
   (`min-w-0 flex-1` — контент не распирает layout).
 - Меню (WP-паттерн): **Media / Pages / Products / Categories / Brands / Blog /
-  SEO Posts**, у пункта иконка
+  SEO Posts / Subscribers**, у пункта иконка
   + подпись. Активный пункт — заливка `accent`; неактивный — приглушённый текст,
   hover — полупрозрачная заливка.
 - Все пункты — рабочие разделы (заглушек «Coming soon» не осталось, компонент
