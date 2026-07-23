@@ -1,6 +1,6 @@
 # Раздел Pages — правила и концепции
 
-> Last updated: 2026-07-17 | Source project: web.admin (docs/pages.md) — пути `src/…` относятся к репозиторию `web.admin/`
+> Last updated: 2026-07-23 | Source project: web.admin (docs/pages.md) — пути `src/…` относятся к репозиторию `web.admin/`
 
 Документ фиксирует, как устроен раздел Pages админки: контракты с данными,
 поведение операций и решения по UI (2026-07-10). Модель данных —
@@ -55,6 +55,10 @@
 (если есть) + `seo_title`. Без поиска, фильтров и кнопки New — 7 строк.
 Маршруты: `/:siteSlug/pages`, `/pages/:pageId`; пункт **Pages** в `SiteLayout`.
 
+Сверху списка закреплена отдельная строка **«Header»** (бейдж `site`) — это НЕ
+строка таблицы `pages`, а сайт-глобальные настройки шапки в своей singleton-таблице
+`header_settings` (см. §6). Рендерится всегда, не зависит от загрузки списка страниц.
+
 ## 3. Форма (`src/features/pages/PageEditPage.tsx`)
 
 - Только edit — `PageForm` монтируется после загрузки `getPage`.
@@ -97,3 +101,22 @@
 - `footer_settings` — отдельная итерация (фаза «pages/hero/footer»).
 - Ручная e2e-проверка раздела — чек-лист Task 5.3 плана
   `../archive/web.admin/superpowers/plans/2026-07-10-pages.md` (см. [status.md](status.md)).
+
+## 6. Header — сайт-глобальные настройки шапки
+
+Отдельный экран, открывается из списка Pages (строка «Header» сверху), но живёт в
+своей таблице `header_settings` ([schema.md](../database/schema.md) §5, миграция 0024
+репо cozycorner) — не в `pages`. Пока одно поле — **Instagram URL** (`instagram_url`);
+таблица заведена с прицелом на рост (новые параметры шапки = новые колонки + строки формы).
+
+- **Слой данных — `src/lib/header.ts`**: `getHeaderSettings` (первая singleton-строка,
+  явные колонки `id,instagram_url`), `updateHeaderSettings` (update по `id` → свежая
+  строка для пересинхронизации формы). Query-ключ `['header', site.slug]`.
+- **Форма — `src/features/pages/HeaderEditPage.tsx`**: sticky Back + Save (`form=
+  "header-form"`), без Delete/Published. Поле Instagram — optional: пусто → `null` →
+  на сайте иконка скрыта; непустое валидируется как `http(s)://…` (zod refine).
+  Гард несохранённых изменений — общий паттерн ([products.md](products.md) §4).
+- **Маршрут** — `/:siteSlug/pages/header` (статический сегмент важнее динамического
+  `pages/:pageId`, коллизии нет). `HeaderEditPage` в `App.tsx` перед `pages/:pageId`.
+- Сайт читает `header_settings` через `fetchHeaderSettings` (`lib/content.ts`) и
+  прокидывает `instagram_url` в `<Header>` из `app/layout.tsx`.

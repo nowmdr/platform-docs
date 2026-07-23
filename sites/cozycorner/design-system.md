@@ -362,11 +362,25 @@ products match these filters»). Опц. `baseFilters` — постоянные 
 [Header.module.css](../../../cozycorner/components/Header.module.css)
 
 Смонтирована в root layout → есть на всех страницах. Раскладка в 3 зоны
-(`grid-template-columns: 1fr auto 1fr`): слева навигация, по центру лого, справа поиск.
-Активный пункт меню подсвечивается (`usePathname`). На мобилке (≤720px) навигация
-прячется, появляется бургер-меню; поиск сужается. Поиск пока без функционала.
+(`grid-template-columns: 1fr auto 1fr`): слева навигация, по центру лого, справа —
+поиск + иконка-ссылка на Instagram. Активный пункт меню подсвечивается (`usePathname`).
+На мобилке (≤720px) навигация прячется в бургер-меню, а зоны переставляются через
+`order`/`justify-self` (разметку не трогаем): поиск+Instagram уходят влево, лого — по
+центру, бургер — вправо; поиск сужается. Поиск пока без функционала.
+
+**Ссылка на Instagram** — иконка `InstagramIcon` в правой зоне рядом с поиском.
+URL приходит пропом `instagramUrl` (root layout читает singleton `header_settings`,
+см. [../../database/schema.md](../../database/schema.md) §5 и раздел «Данные шапки»
+в [cozycorner.md](../cozycorner.md)). **Пусто/недоступно → иконка не рендерится**
+(безопасный фолбэк, как у текста футера). Внешняя ссылка (`target="_blank"`,
+`rel="noopener noreferrer"`, `aria-label`), цвет `--color-text`, hover — `--color-primary`.
+
 **Sticky auto-hide**: при скролле вниз шапка уезжает, при скролле вверх выезжает;
 у верха страницы видна всегда, при проскролленной странице — лёгкая тень.
+**Прозрачная шапка над hero (только мобилка)**: у самого верха (`.atTop`) на странице
+с hero (`body:has([data-hero])`) фон и нижняя граница прозрачны — картинка hero видна
+до верхней кромки, иконки/лого лежат на ней; как только страница проскроллена,
+включается `.headerScrolled` (сплошной фон + тень). На десктопе и без hero шапка сплошная.
 ⚠️ `position: sticky` ломается, если у `body` появится `overflow-x: hidden` —
 поэтому в `globals.css` используется `overflow-x: clip`.
 
@@ -411,8 +425,11 @@ Async серверный компонент, смонтирован в root layo
 ### Icons — иконки-компоненты
 
 [components/icons/](../../../cozycorner/components/icons/): `Logo`, `LogoMark`, `SearchIcon`, `MenuIcon`,
-`CloseIcon`. Каждая — SVG-компонент с `SVGProps`, без фикс-размеров (размер через CSS),
-цвет — `currentColor` (кроме брендовых цветов `Logo`/`LogoMark`). См. правило 9 в
+`CloseIcon`, `InstagramIcon`. Каждая — SVG-компонент с `SVGProps`, без фикс-размеров
+(размер через CSS), цвет — `currentColor` (кроме брендовых цветов `Logo`/`LogoMark`).
+`InstagramIcon` — обводка (`viewBox 0 0 24 24`, `fill=none`, `stroke-width 2`, скруглённые
+концы) в одном стиле с `SearchIcon`/`MenuIcon`: скруглённый квадрат + кружок-объектив +
+точка-вспышка (заливка `currentColor`). См. правило 9 в
 [project-structure.md](project-structure.md).
 
 ### Элементы

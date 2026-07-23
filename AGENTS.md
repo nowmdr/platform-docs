@@ -23,12 +23,13 @@ Read these files only when the task requires it:
 | CozyCorner architecture | platform-docs/sites/cozycorner.md | Any work in the cozycorner repo |
 | Avocado Kiss architecture | platform-docs/sites/avocado-kiss.md | Any work in the avocado.kiss repo |
 | Coding standards | platform-docs/methodology/coding-standards.md | New files, refactoring, code review |
+| Testing strategy | platform-docs/methodology/testing.md | Writing/running tests; choosing a test tool; CI |
 
 ## Workflow rules
 1. Before starting a task — check if a relevant doc file exists in the index above
 2. After completing a task that changes architecture, API, or DB — update the relevant doc file
 3. Never write feature details into AGENTS.md — put them in the appropriate doc file above
-4. When creating a new site project — add it to "Projects" section and create sites/[site-name].md
+4. When creating a new site project — add it to "Projects" section, create sites/[site-name].md, AND wire testing: register it in the root `../AGENTS.md` project registry and follow methodology/testing.md → «Добавление нового проекта» (so any AI agent auto-picks it up for test routing)
 
 ## Context discipline
 - AGENTS.md = index only (you are reading it now)

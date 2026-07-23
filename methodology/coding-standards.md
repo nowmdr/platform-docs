@@ -52,8 +52,10 @@
   ([../admin-panel/](../admin-panel/api.md)); перед фронтом cozycorner —
   [../sites/cozycorner/design-system.md](../sites/cozycorner/design-system.md) и
   [project-structure.md](../sites/cozycorner/project-structure.md).
-- Проверка перед завершением: cozycorner — `npm run build` + `npm run lint`;
-  web.admin — `npm run build` + `npm run lint` (oxlint).
+- Проверка перед завершением: cozycorner / avocado.kiss — `npm run build` +
+  `npm run lint`; web.admin — `npm run build` + `npm run lint` (oxlint).
+- Тесты: unit/integration — Vitest + RTL, e2e — Playwright (в каждом репо
+  `npm test` / `npm run test:e2e`). Инструменты и правила — [testing.md](testing.md).
 - После изменения архитектуры / API / схемы БД — обновить соответствующий файл
   в `platform-docs/` (правило из корневого AGENTS.md).
 - Переиспользование прежде нового кода: generic-компоненты (`RichTextEditor`,

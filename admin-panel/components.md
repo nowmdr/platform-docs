@@ -1,6 +1,6 @@
 # Админ-панель — UX/UI структура и компоненты
 
-> Last updated: 2026-07-22 | Source project: web.admin (docs/ux-ui.md, актуально на 2026-07-16) — пути `src/…` относятся к репозиторию `web.admin/`
+> Last updated: 2026-07-23 | Source project: web.admin (docs/ux-ui.md, актуально на 2026-07-16) — пути `src/…` относятся к репозиторию `web.admin/`
 
 Полное описание интерфейса: карта навигации, экраны, иерархия компонентов, паттерны
 взаимодействия и состояния. Дополняет [media.md](media.md) (правила раздела Media и
@@ -36,7 +36,8 @@
 /dashboard                    — выбор сайта (guard)
 /:siteSlug                    — redirect → /:siteSlug/media (guard)
 /:siteSlug/media              — медиа-менеджер
-/:siteSlug/pages              — список страниц
+/:siteSlug/pages              — список страниц (+ строка «Header» сверху)
+/:siteSlug/pages/header       — сайт-глобальные настройки шапки (header_settings)
 /:siteSlug/pages/:pageId      — детальная страница (SEO + hero-блоки + body)
 /:siteSlug/products           — список товаров
 /:siteSlug/products/new       — создание товара
