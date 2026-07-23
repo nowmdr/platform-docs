@@ -37,7 +37,9 @@ Rounded самохостить нельзя (та же лицензия Apple), 
 в Safari — поэтому Nunito **самохостится**: `@font-face` в globals.css +
 `public/fonts/nunito-800-latin.woff2` (latin, `font-display: swap`). Стек:
 `"Nunito", ui-rounded, "SF Pro Rounded", …` — на всех браузерах даёт скруглённый
-Heavy. Больше нигде не применяется (только hero-заголовки).
+Heavy. Применяется к **display-заголовкам**: `Hero .title` и **`h1` страницы
+`/about`** (`AboutIntro .heading` — та же трактовка: `--font-rounded` + `--fw-heavy`).
+Обычные секционные заголовки (h2/h3) остаются на основном шрифте.
 
 | Токен | Значение | Назначение |
 |---|---|---|
@@ -351,7 +353,30 @@ products match these filters»). Опц. `baseFilters` — постоянные 
 ### PagePlaceholder — заглушка страницы
 
 [components/PagePlaceholder.tsx](../../../cozycorner/components/PagePlaceholder.tsx). Простой «coming soon»
-для ненаполненных роутов (сейчас — Featured/About).
+для ненаполненных роутов (сейчас — Featured).
+
+### About-секции — контент страницы /about
+
+[components/about/](../../../cozycorner/components/about/): `AboutIntro`, `AboutStory`, `AboutValues`
+(каждая — `.tsx` + `.module.css`). Статичные, неповторяющиеся секции страницы `/about`;
+контент приходит из БД (`about_content`, миграция 0026 — см.
+[../../database/schema.md](../../database/schema.md) §5) через `fetchAboutContent`, у
+каждой секции — фолбэк-текст в коде на случай пустого поля. Тонкая `app/about/page.tsx`
+только грузит строку и композирует секции.
+
+- **AboutIntro** — надзаголовок (`.eyebrow` — тот же стиль, что бейдж Hero: `--color-accent`,
+  uppercase, letter-spacing) + `h1` (**скруглённый `--font-rounded` весом `--fw-heavy`,
+  как `Hero .title`**, `--fs-2xl`) + лид (`--fs-lg`/`--fw-light`, muted).
+- **AboutStory** — грид «картинка + текст» (`5fr/6fr`, на ≤768px — одна колонка,
+  картинка сверху). Картинка — `ImageWithFallback` в `aspect-ratio` контейнере
+  (`--radius-lg`), путь через `resolveProductImage`; `h2` + два абзаца (muted).
+- **AboutValues** — три карточки-ценности (грид 3→2→1): чип-иконка (эмодзи на
+  `--color-surface`, `--radius-md`) + `h3` (`--fw-medium`) + текст (muted); карточка на
+  `--color-card` с `--color-border`/`--radius-lg`. Каждая обёрнута в `Reveal` со
+  стаггером (`delay = index * 0.08`).
+
+Правится в админке (раздел Pages → страница About) — см.
+[../../admin-panel/pages.md](../../admin-panel/pages.md) §6. Новых токенов не вводит.
 
 ### Hero — hero-секция
 

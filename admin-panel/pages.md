@@ -57,7 +57,7 @@
 
 Сверху списка закреплена отдельная строка **«Header»** (бейдж `site`) — это НЕ
 строка таблицы `pages`, а сайт-глобальные настройки шапки в своей singleton-таблице
-`header_settings` (см. §6). Рендерится всегда, не зависит от загрузки списка страниц.
+`header_settings` (см. §7). Рендерится всегда, не зависит от загрузки списка страниц.
 
 ## 3. Форма (`src/features/pages/PageEditPage.tsx`)
 
@@ -102,7 +102,31 @@
 - Ручная e2e-проверка раздела — чек-лист Task 5.3 плана
   `../archive/web.admin/superpowers/plans/2026-07-10-pages.md` (см. [status.md](status.md)).
 
-## 6. Header — сайт-глобальные настройки шапки
+## 6. About — контент страницы (about_content)
+
+Страница `about` из фиксированного набора получила **редактируемый контент секций**
+(2026-07-23), помимо SEO. Секции статические и неповторяющиеся (intro / story / три
+карточки-ценности), поэтому контент живёт в **singleton-таблице `about_content`**
+(schema.md §5, миграция 0026) — «колонка на поле», как `header_settings`, а не
+типизированные `*_sections`.
+
+- **Слой данных — `src/lib/about.ts`**: `getAboutContent` (первая singleton-строка,
+  явные колонки), `updateAboutContent` (update по `id` → свежая строка). Пустые поля →
+  `null` (`orNull` в форме). Картинка `story_image_path` — контракт [products.md](products.md) §1.
+- **Встроено в общий редактор страницы** (НЕ отдельный экран, в отличие от Header):
+  `getPage` возвращает `about: AboutContent | null` (грузится только при
+  `slug === ABOUT_SLUG`); `updatePage` пятым аргументом принимает `AboutUpdate | null`
+  и апдейтит `about_content` тем же Save, что SEO+hero. Один экран, один Save.
+- **Форма — `src/features/pages/AboutContentEditor.tsx`**: рендерится только для About
+  (гейт как `hasBody`). Поля регистрируются в общую `pageSchema` под ключом `about`
+  (`toFormValues`/`toAbout`). Блоки Intro / Story / Value cards; story-картинка —
+  `ImagePreviewPicker` + общий `ImagePickerDialog`; иконки карточек — маленькие Input
+  под эмодзи. Три карточки заданы литеральными путями полей (валидный RHF `Path`),
+  набор фиксирован — add/remove нет.
+- Query-ключ не меняется (`['pages', site.slug, id]`) — about едет вместе со страницей.
+- `story_image_path` добавлен в `USAGE_SOURCES` (`src/lib/media.ts`).
+
+## 7. Header — сайт-глобальные настройки шапки
 
 Отдельный экран, открывается из списка Pages (строка «Header» сверху), но живёт в
 своей таблице `header_settings` ([schema.md](../database/schema.md) §5, миграция 0024

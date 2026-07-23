@@ -204,6 +204,26 @@ RLS: публичное чтение + запись `is_admin()`.
 + `features/pages/HeaderEditPage.tsx`). Таблица заведена с прицелом на рост — новые
 параметры шапки = новые колонки.
 
+### about_content — контент страницы /about (singleton, одна строка)
+
+Управляемый контент статической страницы `/about` (миграция 0026, схема `cozycorner`).
+Страница — фиксированный набор неповторяющихся секций (intro / story / три
+карточки-ценности), поэтому это **singleton-таблица «колонка на поле»** (как
+`footer_settings`/`header_settings`), а НЕ типизированные `*_sections` (те — под
+повторяющиеся блоки). Новая секция/поле About = новая колонка, не новая строка.
+
+Поля (все `text`, nullable — пусто → сайт показывает встроенный фолбэк секции):
+`id`, `created_at`, `updated_at`, `eyebrow`, `heading`, `intro` (секция 1);
+`story_heading`, `story_body_1`, `story_body_2`, `story_image_path` (секция 2, путь —
+контракт §4); `card1_icon`/`card1_title`/`card1_text` … `card3_*` (три карточки,
+`*_icon` — эмодзи-строка). RLS: публичное чтение + запись `is_admin()`; `updated_at`
+триггером; сид одной строкой с дефолтным контентом. Сайт читает первую строку
+(`fetchAboutContent`, `cozycorner/lib/content.ts`) и рендерит секции
+`components/about/*` с фолбэками. Правится в админке разделом Pages → страница About
+(`web.admin`, `src/lib/about.ts` + `features/pages/AboutContentEditor.tsx`, встроен в
+`PageEditPage` — один Save на SEO + hero + контент About). Новое поле `story_image_path`
+учтено в `USAGE_SOURCES` админки.
+
 ### media — метаданные загруженных файлов
 
 Источник истины для списка в медиа-менеджере админки (не Storage).
@@ -253,7 +273,10 @@ Invisible-режима.
 admin write; сид одной пустой строкой) ·
 0025 subscribers (email подписки на рассылку; `unique` email; RLS без публичных
 политик — запись под service_role после проверки Turnstile, чтение/удаление только
-admin).
+admin) ·
+0026 about_content (singleton-контент страницы /about: intro/story/три карточки,
+колонка на поле; RLS public read + admin write; сид одной строкой с дефолтным
+контентом).
 
 Нюанс хронологии: 0021 (`add_admin_folders`) и 0022 (`add_content_folders`) применены
 к base-one 2026-07-16 через MCP из админки **до** 0020 (`add_seo_post_type`) — файлы
