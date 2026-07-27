@@ -13,12 +13,16 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
 ## 1. Главные концепции и контракты
 
 - **Слой данных — `src/lib/products.ts`**: `listProducts` (облегчённый select
-  `id,title,created_at,brand,category,image_path,folder_id` для списка), `getProduct`, `createProduct`,
-  `updateProduct`, `deleteProduct`. Справочники category/brand — отдельные модули
-  `src/lib/categories.ts` и `src/lib/brands.ts` (list/create/rename/delete/reorder, у
-  категории ещё `updateCategoryImage`); `rename`/`delete` каскадят в `products` на уровне
-  приложения (FK нет — не атомарно, осознанное упрощение). Всё через `getDb(site)` —
-  схема активного сайта, RLS-запись только под админом.
+  `id,title,created_at,brand,image_path,folder_id` для списка), `getProduct`, `createProduct`,
+  `updateProduct`, `deleteProduct`. Связь товар↔категория — **many-to-many** через
+  `src/lib/productCategories.ts` (`listProductCategories` — карта membership
+  `productId → categoryId[]`, `getProductCategoryIds`, `add`/`removeProductFromCategory`,
+  `setProductCategories` — diff-sync набора). Справочники category/brand — модули
+  `src/lib/categories.ts` и `src/lib/brands.ts` (list/create/rename/delete/reorder). У
+  **бренда** `rename`/`delete` каскадят в `products.brand` на уровне приложения (FK нет). У
+  **категории** каскада в товары больше нет: членство — по `category_id`, удаление категории
+  чистит связи FK `on delete cascade`. Всё через `getDb(site)` — схема активного сайта,
+  RLS-запись только под админом.
 - **slug не редактируется в админке.** БД-триггер `products_set_slug`
   (BEFORE INSERT OR UPDATE) генерирует slug из title, если он пуст; при create
   поле slug не отправляется вовсе, при edit показывается read-only.
@@ -44,22 +48,29 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   текущими title/description БЕЗ пометки формы dirty, Use defaults очищает
   (`shouldDirty: true` — сравнение с defaults, лишнего dirty не будет).
 - **Пустые optional-поля всегда `null`**, не пустые строки (`orNull` в `toInput`).
-- **`category`/`brand` товара = `categories.name`/`brands.name`** (текст, не FK).
-  Оба редактируются единым `TaxonomyCombobox` (`src/features/taxonomy/`): выбор
-  существующего, создание нового на месте, пункт None (пустая строка → `null` в
-  `toInput`), вход в полное управление (Manage…). Brand больше не free-text —
-  таблица `brands` (миграция 0023).
+- **Категории товара — many-to-many** (`product_categories`, миграции 0027/0028): товар
+  может быть в 0..N категориях. В редакторе — `CategoryChipsField`
+  (`src/features/products/`): выбранные категории чипами (с удалением) + поповер
+  «Add category». Значение — массив `category_id` вне RHF (это не колонка `products`);
+  начальные грузятся `getProductCategoryIds`, при сохранении — `setProductCategories`
+  diff-sync поверх `updateProduct`. Колонки `products.category` больше нет.
+- **`brand` товара = `brands.name`** (текст, не FK). Редактируется `TaxonomyCombobox`
+  (`src/features/taxonomy/`): выбор существующего, создание на месте, None (пустая строка
+  → `null`), Manage…. Brand — таблица `brands` (миграция 0023), не free-text.
 
 ## 2. Список (`src/features/products/ProductsPage.tsx`)
 
-- Одна колонка строк-ссылок: title слева, `brand · category` приглушённо справа.
+- Одна колонка строк-ссылок: title слева, `brand` приглушённо справа (категория ушла из
+  строки — она теперь M2M). Строка вынесена в общий `ProductListRow`
+  (`src/features/products/`), переиспользуется на странице категории.
 - Сортировка: `created_at desc` + **tiebreaker `title asc`** — у импортированных
   товаров timestamps совпадают пачками, без tiebreaker'а порядок нестабилен.
   Не убирать.
 - Поиск (по title, `useDeferredValue`-паттерн из MediaPage) + фильтры **Brand,
-  затем Category** (порядок как в строке товара): бренды — полный справочник
-  `listBrands` (query `['brands', site.slug]`), категории — полный справочник
-  `listCategories` (query `['categories', site.slug]`, общий с формой/менеджером).
+  затем Category**: бренды — полный справочник `listBrands` (query `['brands', site.slug]`),
+  категории — полный справочник `listCategories` (query `['categories', site.slug]`). Фильтр
+  Category — по **членству** M2M: `value` селекта = `category_id`, карта
+  `listProductCategories` (query `['product-categories', site.slug]`).
   Фильтрация клиентская
   (товаров десятки), условия по AND; счётчик `видимые / все` при активном
   фильтре; ghost-кнопка Clear сбрасывает всё.
@@ -109,8 +120,9 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
   на кнопке. Грид-шапка `md:grid-cols-[16rem_1fr]` — превью image + slug
   слева; справа Title, ряд Price + Image path+Gallery (`grid-cols-[8rem_1fr]` —
   Price узкий, `type=text inputMode=decimal` без спиннеров), затем Referral URL;
-  ниже на всю ширину `max-w-4xl` — ряд Category + Brand, Description, SEO
-  (2026-07-22: Brand переехал сюда с ряда Price, Referral URL поднялся в шапку).
+  ниже на всю ширину `max-w-4xl` — ряд **Categories (чипы, M2M) + Brand**, Description, SEO
+  (2026-07-27: Category стал мультивыбором `CategoryChipsField` вместо одиночного
+  комбобокса; 2026-07-22: Brand переехал сюда с ряда Price, Referral URL поднялся в шапку).
   **Image style убран из вёрстки** — поле, схема и `toInput` не тронуты (для
   новых товаров дефолт `cutout`, у существующих — сохранённое значение).
   Невалидный Save — тост с КОНКРЕТНЫМ сообщением первого невалидного поля
@@ -122,7 +134,9 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
 - Приложение на **data router** (`createBrowserRouter` в `App.tsx`, экспорт
   `router`; `RouterProvider` в `main.tsx`) — это требование `useBlocker`;
   декларативный `<Routes>` не вернуть без потери гарда.
-- Условие блокировки: `isDirty && !save.isPending && !remove.isPending`.
+- Условие блокировки: `(isDirty || categoriesDirty) && !save.isPending && !remove.isPending`.
+  `categoriesDirty` — отдельный флаг: набор категорий (чипы) живёт вне RHF, поэтому его
+  изменения RHF-`isDirty` не видит — их учитывают явно.
   `!isPending` обязателен: во время мутации гард снят, поэтому `navigate` из
   `onSuccess` (redirect на созданный товар, возврат после delete) не ловится
   собственным блокером.
@@ -137,7 +151,19 @@ UX-детали — [components.md](components.md) §3.7. Читать этот 
 - При создании новых форм (categories и т.п.) переиспользовать этот паттерн
   целиком.
 
-## 5. Известные хвосты / на потом
+## 5. Страница категории (M2M)
+
+- **`categories/:categoryId`** (`src/features/taxonomy/CategoryProductsPage.tsx`): клик по
+  категории в `TaxonomyManager` ведёт сюда (роут, не модалка — через `config.rowTo`).
+  Показывает товары категории (по членству `product_categories`, вид `ProductListRow` без
+  миниатюры), кнопки **Add product** (пикер `ProductPickerDialog` со всеми товарами кроме
+  уже-членов), **Remove from category** (убирает только связь `removeProductFromCategory`, с
+  предупреждающей модалкой — товар не удаляется и остаётся в других категориях), **Edit
+  category** (переиспользует `CategoryEditDialog`). Клик по товару → его правка с
+  `?from=category:<id>`; back-ссылка в редакторе читается как «Back to category» и
+  возвращает сюда.
+
+## 6. Известные хвосты / на потом
 
 - Проверки «товар используется в постах» при удалении нет.
 - Серверная пагинация/фильтрация не нужна на текущих объёмах (десятки строк).

@@ -96,28 +96,48 @@
 | `image_path` | text | ключ в бакете или внешний URL (§4) |
 | `referral_url` | text | реферальная ссылка «где купить» |
 | `brand` | text (nullable) | бренд — фильтрация (индекс) |
-| `category` | text (nullable) | категория = `categories.name` (текст, FK нет; индекс) |
 | `slug` | text (unique, not null) | kebab-slug для `/product/[slug]`; автоген из `title` |
 | `description` | text (nullable) | **Markdown** (подмножество: абзацы пустой строкой, списки `-`/`1.`, `**bold**`, `*italic*`; без ссылок/заголовков/кода). Старый плоский текст валиден как есть |
 | `image_style` | text (not null, default `photo`) | `photo` — «живое» фото, cover во всю плитку; `cutout` — товар без фона/на белом, contain с паддингами на белой плитке |
 | `seo_title` / `seo_description` | text (nullable) | SEO-оверрайды; пусто = фолбэк на `title`/`description` |
 | `folder_id` | uuid (nullable, FK → admin_folders) | папка админки (§5 admin_folders); сайт поле не читает |
 
+Категория(и) товара — **many-to-many** через `product_categories` (см. ниже). Прежней
+колонки `products.category` больше нет (миграция 0028); товар может быть в 0..N категориях.
+
 ### categories — категории каталога
 
-Источник карточек `/shop` и страниц `/shop/[slug]`. Товары привязаны по имени:
-`products.category = categories.name`.
+Источник карточек `/shop` и страниц `/shop/[slug]`. Товары связаны с категориями
+**many-to-many** через `product_categories` (по `category_id`, см. ниже).
 
 | Поле | Тип | Назначение |
 |---|---|---|
 | `id`, `created_at` | uuid pk, timestamptz | служебные |
-| `name` | text (unique, not null) | отображаемое имя; ключ связи с товарами |
+| `name` | text (unique, not null) | отображаемое имя категории |
 | `slug` | text (unique, not null) | для `/shop/[category]`; автоген из `name` |
 | `image_path` | text (nullable) | **всегда cutout** (PNG с прозрачным фоном) — карточка на `/shop` |
 | `position` | integer (not null, default 0) | порядок карточек |
 | `hero_badge` / `hero_title` / `hero_description` | text (nullable) | hero страницы категории; пусто — фолбэки в коде (`Category` / `name` / автоформула) |
 | `hero_image_path` | text (nullable) | фон hero; пусто — фолбэк на фон hero `/shop` |
 | `seo_title` / `seo_description` | text (nullable) | SEO; пусто — автоформула из `name` |
+
+### product_categories — связь товар↔категория (M2M)
+
+Членство товаров в категориях (миграция 0027) — пришла на смену текстовой
+`products.category`: товар может принадлежать нескольким категориям.
+
+| Поле | Тип | Назначение |
+|---|---|---|
+| `product_id` | uuid (FK → products, on delete cascade) | товар |
+| `category_id` | uuid (FK → categories, on delete cascade) | категория |
+
+PK — `(product_id, category_id)`; индекс по `category_id` (выборка товаров категории).
+RLS: public read (anon+authenticated), запись — `authenticated` + `public.is_admin()` —
+как у products/categories. Удаление товара или категории чистит связи каскадом (FK), поэтому
+переименование/удаление категории в админке больше не каскадит в товары (членство — по id).
+Фронт `/shop/[category]` и связанные выборки фильтруют через inner-join
+(`product_categories!inner`); админка правит связи в редакторе товара (чипы категорий) и
+на странице категории (add/remove).
 
 ### brands — бренды каталога
 
@@ -276,7 +296,11 @@ admin write; сид одной пустой строкой) ·
 admin) ·
 0026 about_content (singleton-контент страницы /about: intro/story/три карточки,
 колонка на поле; RLS public read + admin write; сид одной строкой с дефолтным
-контентом).
+контентом) ·
+0027 product_categories (связь товар↔категория M2M: PK `(product_id, category_id)`,
+FK on delete cascade, RLS public read + admin write; бэкфилл из `products.category` по
+имени — 50 связей) ·
+0028 drop products.category (модель категорий стала M2M — текстовая колонка удалена).
 
 Нюанс хронологии: 0021 (`add_admin_folders`) и 0022 (`add_content_folders`) применены
 к base-one 2026-07-16 через MCP из админки **до** 0020 (`add_seo_post_type`) — файлы
