@@ -59,10 +59,14 @@
   публичное чтение; запись/удаление — `is_admin()`.
 - Ограничения чтения: `posts` — анону только `is_published = true`; секции постов и
   hero-секции — только опубликованные; `media` и `admin_folders` — публичного чтения
-  НЕТ (весь CRUD только под админом). Колонка `posts.preview_token` дополнительно
-  отозвана у `anon` (`revoke select`, 0030): это capability для превью, доступ — только
-  у service-role. Поэтому анон-выборки постов используют явный список колонок
-  (`PUBLIC_POST_COLUMNS`), а не `select("*")`.
+  НЕТ (весь CRUD только под админом). Колонка `posts.preview_token` НЕ выдаётся `anon`:
+  у роли снят табличный `select` на `posts` и выдан column-level `select` на все колонки
+  КРОМЕ `preview_token` (0031). ⚠️ Урок: column-level `revoke select (col)` НЕ
+  перекрывает табличный `grant select` (0030 оказалась пустышкой) — чтобы скрыть колонку,
+  надо снять табличный грант и выдать column-level на остальные. Из-за этого анон-выборки
+  постов используют явный список колонок (`PUBLIC_POST_COLUMNS`), а не `select("*")`
+  (иначе анонный `select *` упал бы на `preview_token`). Доступ к токену — только
+  service-role (превью) и authenticated-админ (RLS).
   ⚠️ Диагностика: anon-запросы к `media` ВСЕГДА возвращают 0 строк, даже когда данные
   есть, — проверять содержимое через SQL Editor / MCP / Management API (роль postgres).
 - Auth: Email-провайдер включён, публичная регистрация закрыта; 2 админа заведены и
@@ -174,7 +178,7 @@ authenticated, `public.is_admin()`) — как у categories. Миграция `
 | `cover_image_path` | text (nullable) | обложка (§4) |
 | `seo_title` / `seo_description` | text (nullable) | пусто = фолбэк `title`/`excerpt` |
 | `folder_id` | uuid (nullable) | папка админки |
-| `preview_token` | uuid (not null, default `gen_random_uuid()`) | capability-токен превью черновика (0029). НЕ флаг видимости. Анону НЕ выдаётся (`revoke select`, 0030) — читается только service-role клиентом на роуте `/preview/blog/[slug]` |
+| `preview_token` | uuid (not null, default `gen_random_uuid()`) | capability-токен превью черновика (0029). НЕ флаг видимости. Анону НЕ выдаётся (column-grant, 0031) — читается только service-role клиентом на роуте `/preview/blog/[slug]` |
 
 ### post_text_sections + post_product_sections — секции поста
 
@@ -307,9 +311,11 @@ FK on delete cascade, RLS public read + admin write; бэкфилл из `produc
 0028 drop products.category (модель категорий стала M2M — текстовая колонка удалена) ·
 0029 posts.preview_token (capability-токен превью черновика; `uuid not null default
 gen_random_uuid`, бэкфилл существующих строк автоматом) ·
-0030 revoke select(preview_token) от anon (токен читает только service-role;
-применяется ПОСЛЕ деплоя явного списка колонок в анон-выборках — иначе `select("*")`
-упадёт на отозванной колонке).
+0030 revoke select(preview_token) от anon — **нерабочая попытка**: column-level revoke
+НЕ перекрывает табличный grant select, эффекта нет (has_column_privilege остался true) ·
+0031 корректный отзыв: `revoke select on posts` от anon + `grant select` на все колонки
+КРОМЕ preview_token (применён ПОСЛЕ деплоя явных колонок в анон-выборках — иначе анонный
+select упал бы; проверено: `has_column_privilege(anon, preview_token) = false`).
 
 Нюанс хронологии: 0021 (`add_admin_folders`) и 0022 (`add_content_folders`) применены
 к base-one 2026-07-16 через MCP из админки **до** 0020 (`add_seo_post_type`) — файлы
