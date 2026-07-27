@@ -24,6 +24,8 @@ app/
   shop/[category]/page.tsx  # архив категории (SSG+ISR): hero/SEO из categories.* + ShopCatalog
   blog/page.tsx             # архив блога: Hero + сетка PostCard
   blog/[slug]/page.tsx      # пост (SSG+ISR): hero из полей поста + секции из БД + Related posts
+  preview/blog/[slug]/page.tsx  # превью черновика (force-dynamic, noindex): пост через
+                            # service-role по preview_token; ВСЕ секции; сетка/ISR не трогаются
   terms|privacy/page.tsx    # юридические страницы (LegalArticle): SEO из pages; тело — pages.body
   search/page.tsx           # результаты поиска (?q=, динамическая, noindex)
   featured/page.tsx         # заглушка (PagePlaceholder); скрыта из меню, жива по URL
@@ -43,6 +45,7 @@ components/           # один компонент = файл + CSS Module; к�
   CategoryCard.tsx / CategoryGrid.tsx  # карточки категорий на /shop
   ProductCard.tsx / PostCard.tsx       # карточки товара/поста (stretched-link)
   PostTextSection.tsx / PostProductsSection.tsx  # секции поста из БД
+  BlogPostView.tsx    # общая презентация страницы поста (hero+секции+related) — общий для /blog/[slug] и /preview
   RecommendedPosts.tsx / RelatedProducts.tsx / RelatedArticles.tsx  # «related»-блоки
   ProductGrid.tsx     # сетка 3 колонки + бесконечный скролл + скелетоны
   ProductCardSkeleton.tsx / ImageWithFallback.tsx / CustomScrollbar.tsx
@@ -141,6 +144,15 @@ supabase/migrations/  # единственное место изменения �
   колонке `--content-narrow`, продуктовые сетки — на полной ширине), затем
   `RecommendedPosts`. SEO-посты (`post_type='seo'`) скрыты из лент и поиска,
   открываются по прямому URL, включены в sitemap — **без cloaking**.
+- **Превью черновика**: `/preview/blog/[slug]?token=<uuid>` — `force-dynamic`,
+  `noindex` (robots meta), не в sitemap и не в `generateStaticParams`. Читает пост
+  **service-role** клиентом (`lib/supabase/admin.ts`) через `fetchPostForPreview`
+  ТОЛЬКО при совпадении `posts.preview_token` (сам токен из результата вырезается —
+  в браузер не попадает); секции — `fetchPostSections(…, { includeUnpublished: true })`
+  (показывает и неопубликованные секции). Невалидный/отсутствующий токен →
+  `notFound()`. Разметка — общий `BlogPostView` (идентична живой странице). Ссылку
+  генерирует web.admin (кнопка «Copy preview link»). Сетка `/blog`, ISR и
+  `is_published`-гейт живой страницы не затрагиваются.
 - **Поиск**: `SearchBox` в шапке (live-панель) + `/search?q=`. Запросы — `ilike`
   через `.or()` с обязательной санитизацией (`sanitizeSearchQuery` — `,()` ломают
   синтаксис PostgREST). Детали — [cozycorner/search.md](cozycorner/search.md).

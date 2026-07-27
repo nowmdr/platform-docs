@@ -194,3 +194,25 @@ SEO Posts — 2026-07-16). Модель данных — [../database/schema.md]
 - Ручная e2e-проверка раздела под админом ещё не выполнена — чек-лист
   Task 6.1 плана `../archive/web.admin/superpowers/plans/2026-07-10-blog.md`
   (см. [status.md](status.md)).
+
+## 6. Превью поста (preview link, 2026-07-27)
+
+Редактор может открыть черновик на реальном фронте cozycorner по спец-ссылке, не
+публикуя его в ленту. Спека — `../superpowers/specs/2026-07-27-blog-post-preview-design.md`;
+план — `../superpowers/plans/2026-07-27-blog-post-preview.md`.
+
+- **Токен** — `posts.preview_token` (uuid, миграция 0029): capability, НЕ флаг
+  видимости. Админка его только ЧИТАЕТ (`getPost` → `POST_COLUMNS` включает
+  `preview_token`; `PostInput` его исключает — админка токен не пишет). Service-role
+  ключа в web.admin нет.
+- **Кнопка** «Copy preview link» — `src/features/posts/CopyPreviewLinkButton.tsx`, в
+  sticky-панели редактора рядом с Save. Строит
+  `${site.frontendUrl}/preview/blog/${slug}?token=${preview_token}` и копирует в буфер
+  (toast «Preview link copied»). Скрыта, если у сайта не задан `frontendUrl`
+  (`src/config/sites.ts`) или пост ещё не сохранён (нет slug/token).
+- **Фронт** — cozycorner роут `app/preview/blog/[slug]/page.tsx` (force-dynamic,
+  noindex): читает пост service-role клиентом ТОЛЬКО при совпадении токена, показывает
+  ВСЕ секции (игнорирует per-section `is_published`). Сетка/ISR/`generateStaticParams`
+  не затрагиваются. Детали — [../sites/cozycorner.md](../sites/cozycorner.md) §5.
+- **Отзыв ссылки** (регенерация токена) — отложено; колонка есть, добавляется без
+  миграции.
