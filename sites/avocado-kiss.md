@@ -154,7 +154,10 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
   точки + стрелки-кнопки переключают вручную. `prefers-reduced-motion` →
   мгновенное переключение (`duration: 0`). Ширина: слайдер **во всю ширину**
   вьюпорта с малыми отступами (`padding-inline: clamp(0.75rem,1.5vw,1.5rem)`),
-  без `.shell`-обёртки — в отличие от контентных секций (1320px).
+  без `.shell`-обёртки — в отличие от контентных секций (1320px). Высота (≥768):
+  не aspect-ratio, а `height: calc(100svh - 11.5rem)` (вычтены sticky-шапка
+  bar+nav 8rem, верхний отступ 2rem, зазор снизу), `min/max-height` — чтобы
+  слайдер целиком помещался во вьюпорт при первой загрузке.
 - **`Reveal`** (`components/Reveal.tsx`, клиентский): обёртка вокруг секций/
   карточек — GSAP `from()` (`autoAlpha: 0, y: 24`) через `ScrollTrigger`
   (`start: "top 88%", once: true`), `@gsap/react`'s `useGSAP` со `scope`.
