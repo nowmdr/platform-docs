@@ -364,20 +364,52 @@ admin) ·
 | Поле | Тип | Назначение |
 |---|---|---|
 | `id`, `created_at`, `updated_at` | — | служебные |
-| `slot` | text (not null, check) | `hero` \| `grid_large` \| `grid_medium` \| `grid_list` \| `wide` \| `pick` \| `pick_feature` |
+| `slot` | text (not null, check) | `hero` \| `grid_large` \| `grid_medium` \| `grid_list` \| `wide` \| `pick` \| `pick_feature` \| `mosaic_banner` |
 | `position` | integer (not null, default 0) | порядок внутри слота |
-| `recipe_id` | uuid (not null, FK → recipes, on delete cascade) | какой рецепт показывать |
+| `recipe_id` | uuid (nullable, FK → recipes, on delete cascade) | ссылка на рецепт (полиморфизм — см. ниже) |
+| `post_id` | uuid (nullable, FK → posts, on delete cascade) | ссылка на пост блога (для Editor's Picks) |
 | `eyebrow` | text (nullable) | оверрайд лейбла; пусто → категория рецепта |
-| `eyebrow_secondary` | text (nullable) | второй лейбл в picks («Food \| Drinks») |
+| `eyebrow_secondary` | text (nullable) | устар.: до v2 — второй лейбл picks; теперь метки Editor's Picks берутся из тегов элемента |
 | `description` | text (nullable) | оверрайд описания; пусто → excerpt рецепта |
 | `is_published` | boolean (default true) | RLS: анону только опубликованные |
 
 Ёмкость слотов по макету (валидирует админка фазы B, сайт рендерит что есть):
 `hero` — 3, `grid_large` — 1, `grid_medium` — 2, `grid_list` — 5, `wide` — 2,
-`pick` — 3, `pick_feature` — 1. Загрузчик сайта джойнит рецепты через
+`pick` — 3, `pick_feature` — 1, `mosaic_banner` — 1 (широкий баннер мозаики
+главной; слот допускает несколько строк — задел под слайдер, сайт рендерит
+первую). Загрузчик сайта джойнит рецепты через
 `recipes!inner` embed + двойной фильтр `is_published` (на слот и на embed) —
 слот со скрытым рецептом отбрасывается целиком, а не рендерится пустым.
 Подробности курирования — [../sites/avocado-kiss.md](../sites/avocado-kiss.md) §3.
+
+**Полиморфизм (v2):** слот ссылается на **рецепт ИЛИ пост** — `recipe_id` и
+`post_id` оба nullable, `check (num_nonnulls(recipe_id, post_id) = 1)` требует
+ровно одну ссылку. Мозаика главной использует только рецептные слоты; секция
+Editor's Picks (`pick` / `pick_feature`) — любой из двух типов. Загрузчик
+`fetchEditorsPicks` разрешает рецепт/пост и берёт теги у самого элемента.
+
+### tags — сквозные метки контента
+
+Единая таксономия для всех типов контента (recipe/post/product). `id`,
+timestamps, `name` (unique), `slug` (автоген из name, unique), `position`.
+**Отличие от `categories`:** категории — раздел рецепта (несколько, в карточках
+как SEASONAL); теги — сквозные метки (LIFE, COMMUNITY), выводятся в Editor's
+Picks через «\|». Публичное чтение — все строки; запись — админ.
+
+### recipe_tags / post_tags — связи контент↔теги
+
+Join-таблицы many-to-many: `(recipe_id|post_id, tag_id)` PK + `position`
+(порядок вывода тегов), `on delete cascade` с обеих сторон, индекс по `tag_id`.
+`product_tags` появится вместе с товарами. Публичное чтение — все строки
+(видимость гейтит сам рецепт/пост).
+
+### posts — посты блога (скелет)
+
+2-й тип контента (финальные поля/дизайн — позже). `id`, timestamps,
+`published_at`, `is_published`, `title`, `slug` (автоген из title, unique),
+`excerpt`, `hero_image_path` (тот же контракт картинок, что и у рецептов).
+Публичное чтение — только опубликованные; запись — админ. Единый single-page
+для блога — маршрут `/archive/[slug]` (в работе).
 
 ### pages — страницы + SEO
 
@@ -417,7 +449,11 @@ pages, footer_settings, media + гранты + RLS, шаблон cozycorner 0017
 0002 bucket `avocado-kiss-photos` (public read, запись `is_admin()`, шаблон
 0018) · 0003 демо-сид (8 категорий из макета, демо-рецепты — тексты рецепта
 zucchini и карточки главной из мокапов, `home_slots` на все слоты, строки
-`pages.home` и `footer_settings`).
+`pages.home` и `footer_settings`) · 0004 слот `mosaic_banner` (расширение
+check-констрейнта `home_slots.slot` + демо-строка баннера; редизайн главной
+v2) · 0005 модель контента: `tags` + `recipe_tags` + `posts` + `post_tags`,
+полиморфные слоты (`home_slots.recipe_id` XOR `post_id`, check
+`num_nonnulls=1`), сид тегов picks (редизайн главной v2, Editor's Picks).
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом
