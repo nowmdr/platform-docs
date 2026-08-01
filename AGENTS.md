@@ -24,6 +24,7 @@ Read these files only when the task requires it:
 | Avocado Kiss architecture | platform-docs/sites/avocado-kiss.md | Any work in the avocado.kiss repo |
 | Coding standards | platform-docs/methodology/coding-standards.md | New files, refactoring, code review |
 | Testing strategy | platform-docs/methodology/testing.md | Writing/running tests; choosing a test tool; CI |
+| Connector content-ops skills | platform-docs/skills/README.md | Loading/editing the claude.ai content-ops skills (per-site content editing) |
 
 ## Workflow rules
 1. Before starting a task — check if a relevant doc file exists in the index above
