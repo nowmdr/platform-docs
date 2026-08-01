@@ -455,10 +455,11 @@ Join-таблицы many-to-many: `(recipe_id|post_id, tag_id)` PK + `position`
 
 ### pages — страницы + SEO
 
-Фиксированный набор из 1 строки (`home`) — create/delete нет. `id`,
+Фиксированный набор из 2 строк (`home`, `shop`) — create/delete нет. `id`,
 timestamps, `slug` (unique), `seo_title`, `seo_description`, `og_image_path`
-(§4). В отличие от cozycorner здесь нет `hero_sections`/`body` — v1 не имеет
-отдельного hero-контента для статических страниц и markdown-полей.
+(§4). Строка `shop` добавлена миграцией 0007 (SEO хаба `/shop`). В отличие от
+cozycorner здесь нет `hero_sections`/`body` — v1 не имеет отдельного
+hero-контента для статических страниц и markdown-полей.
 
 ### footer_settings — текст футера (singleton, одна строка)
 
@@ -484,6 +485,60 @@ admin_folders). RLS: весь CRUD — только `is_admin()`, публичн
 `media.folder_id` — nullable FK, `on delete set null` — удаление папки не
 удаляет элементы. Сайт таблицу не читает.
 
+### shop_categories — категории Curated Shop
+
+Таксономия товаров магазина, **независима от рецептных `categories`** (другая
+сенсибильность). `id`, `created_at`, `slug` (unique — `/shop/[slug]`; **без
+триггера автогенерации** — задаётся явно при insert), `name`, `item_count`
+(integer, default 0 — «31 items» на карточке хаба; держится согласованным с
+фактическим числом товаров категории при посеве), `position` (порядок сетки
+хаба), `hero_eyebrow`/`hero_title`/`hero_description`/`hero_image_path`
+(nullable — hero страницы категории), `seo_title`/`seo_description`. Публичное
+чтение — все строки; запись — `is_admin()`.
+
+### products — товары Curated Shop
+
+| Поле | Тип | Назначение |
+|---|---|---|
+| `id`, `created_at` | uuid pk, timestamptz | служебные |
+| `slug` | text (unique, not null) | `/product/[slug]`; **без автоген-триггера** — задаётся явно |
+| `title` | text (not null) | название |
+| `brand` | text (nullable) | эйброу карточки; текст, без справочника брендов |
+| `price` | numeric(10,2) (not null) | цена; форматируется `formatPrice()` |
+| `description` | text (nullable) | тело страницы товара |
+| `image_path` | text (nullable) | плоский ключ `avocado-kiss-photos` или внешний URL (§4); тестовый сид → null |
+| `referral_url` | text (not null) | «Buy from …» — внешняя ссылка |
+| `category` | text (nullable) | = `shop_categories.slug` (**текст, FK нет** — паттерн `recipes.category`; индекс) |
+
+Индексы: `(category)` и `(created_at desc, id desc)` — детерминированная
+пагинация `.range()` (как cozycorner). `category_name` в типе `Product` —
+**вычисляемое** поле (lookup к `shop_categories.name` по slug), не колонка.
+Товары **не тегируются** (нет `product_tags` — фильтры каталога статичны в v1).
+Публичное чтение — все строки; запись — `is_admin()`.
+
+### shop_editors_picks / product_pairings / product_reading — курация магазина
+
+Три join-таблицы по образцу `home_slots` (ручной выбор редакции). Все: `id`,
+`created_at`, `position` (порядок вывода), публичное чтение `using (true)`,
+запись — `is_admin()`.
+
+- **shop_editors_picks** — «Editors' picks this month» на `/shop` (4 товара).
+  `product_id` (FK → products, on delete cascade), `unique(product_id)`.
+- **product_pairings** — «Pairs well with» на странице товара (товар → товар, по
+  3). `product_id` + `paired_product_id` (оба FK → products, cascade),
+  `unique(product_id, paired_product_id)`, `check (product_id <> paired_product_id)`
+  (без само-ссылок). Embed неоднозначен (2 FK на products) — загрузчик указывает
+  явный хинт `products!product_pairings_paired_product_id_fkey`.
+- **product_reading** — «Related reading» на странице товара (товар → **реальный
+  рецепт**, по 3). `product_id` (FK → products) + `recipe_id` (FK → **recipes**,
+  cascade), `unique(product_id, recipe_id)`. RLS даёт `using (true)`, но
+  загрузчик embed'ит `recipes!inner` + `eq('recipe.is_published', true)` (плюс
+  RLS на recipes пускает только опубликованные) — неопубликованные рецепты в
+  блок не протекают (паттерн `fetchHomeSlots`). Проекция → `ReadingItem`
+  (`href=/recipes/{slug}`, `eyebrow=category`, `imagePath=hero_image_path`).
+
+Строка `pages.shop` (SEO хаба) добавлена миграцией 0007 — см. `pages` выше.
+
 ## 10. История миграций (репозиторий avocado.kiss, `supabase/migrations/`)
 
 0001 схема `avocado_kiss` (categories, admin_folders, recipes, home_slots,
@@ -498,7 +553,12 @@ v2) · 0005 модель контента: `tags` + `recipe_tags` + `posts` + `p
 `num_nonnulls=1`), сид тегов picks (редизайн главной v2, Editor's Picks) ·
 0006 больше контента категорий: теги-дескрипторы блюд + новые рецепты
 (Breakfast/Seafood были пусты) + бэкфилл hero-картинок (внешние URL) +
-привязка тегов к рецептам категорий.
+привязка тегов к рецептам категорий · 0007 Curated Shop: `shop_categories`,
+`products` (текстовая `category`, без FK), курация `shop_editors_picks` +
+`product_pairings` + `product_reading` (по образцу `home_slots`; RLS/гранты
+шаблона 0001) + строка `pages.shop`. Посев (6 категорий, 36 товаров
+`image_path=null`, 4 picks, по 3 пары/чтения на товар → опубликованные рецепты)
+— через `avocado-content-ops`, не миграцией.
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом

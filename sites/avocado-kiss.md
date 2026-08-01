@@ -145,9 +145,13 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
   внешние рендерятся с `unoptimized: true` — их хосты в `remotePatterns`
   добавлять не нужно (тот же принцип, что в cozycorner — не расширять
   allowlist, не тратить квоту оптимизации Vercel на чужие CDN).
-- Единственное поле картинки в v1 — `recipes.hero_image_path` (используется и
-  как обложка карточки, и как hero-фото страницы рецепта); отдельного поля
-  под картинку категории в v1 нет.
+- Поля картинок рецептов в v1 — `recipes.hero_image_path` (используется и как
+  обложка карточки, и как hero-фото страницы рецепта); отдельного поля под
+  картинку рецептной категории нет. У магазина (§8) свои поля картинок:
+  `products.image_path` и `shop_categories.hero_image_path` (тот же контракт
+  бакета `avocado-kiss-photos`), разбор — `resolveProductImage()` (`lib/shop.ts`,
+  зеркало `resolveRecipeImage`, тот же бакет). Тестовый сид товаров —
+  `image_path=null` → рендерится `MediaPlaceholder`.
 - Битый/пустой путь → `resolveRecipeImage` возвращает `null`; карточки мозаики,
   Editor's Picks и `RecipeCard` (сетка категории) рендерят брендовый плейсхолдер
   `MediaPlaceholder` (надпись «Avocado Kiss» на бумажном градиенте) вместо
@@ -211,3 +215,47 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
   запись в `SITES` (`web.admin/src/config/sites.ts`, slug `avocado-kiss`),
   секции Recipes/Categories/Home (пикер по слотам)/Pages/Footer/Media.
   Контракт БД под неё уже спроектирован (см. schema.md).
+
+## 8. Curated Shop (раздел магазина)
+
+Куратируемый магазин: сетка категорий + товары + карточки товара со связанной
+курацией. Собственная таксономия (`shop_categories`), товары в `products`,
+курация тремя join-таблицами (schema.md §9). Данные — `lib/shop.ts` (загрузчики
+поверх Supabase; **не** `server-only` — `ProductGrid` вызывает
+`fetchProductsPage` из браузера для Load more). Типы — `lib/types.ts`
+(`Product`, `ShopCategory`, `ReadingItem`, `SHOP_PAGE_SIZE = 9`).
+
+**Маршруты (все SSG + ISR `revalidate = 60`):**
+
+- `/shop` — хаб: `ShopHero` (редакционная константа) + сетка категорий
+  (`fetchShopCategories`, сортировка `position, name`, «N items» из
+  `item_count`) + «Editors' picks this month» (`fetchEditorsPicks`, 4 товара).
+  SEO — `fetchPageSeo('shop')` (строка `pages.shop`).
+- `/shop/[category]` — страница категории: `ShopHero` из полей `shop_categories`
+  (`generateStaticParams` ← `fetchShopCategorySlugs`) + статичная панель
+  `ShopFilters` (декоративная, фильтрация в v1 не работает) + `ProductGrid`.
+  `ProductGrid` рендерит первую страницу (9, сетка 3×3) на сервере и догружает
+  следующие кнопкой **Load more** через браузерный `fetchProductsPage(supabase,
+  {categorySlug, page})`; дедуп по `id`; кнопка прячется, когда пришло
+  < `SHOP_PAGE_SIZE`. Порядок «Newest first» детерминирован (`created_at desc,
+  id desc` — как cozycorner).
+- `/product/[slug]` — страница товара (`generateStaticParams` ←
+  `fetchProductSlugs`): `ProductDetail` (`fetchProductBySlug`, `category_name`
+  для эйброу/бэклинка достраивается lookup'ом к `shop_categories`) +
+  «Pairs well with» (`fetchProductPairings` → 3 товара, без само-ссылки) +
+  «Related reading» (`fetchRelatedReading` → 3 **опубликованных** рецепта).
+
+**Курация:** `fetchRelatedReading` embed'ит `recipes!inner` +
+`eq('recipe.is_published', true)` — неопубликованные рецепты в блок не
+протекают (паттерн `fetchHomeSlots`); проекция рецепта → `ReadingItem`
+(`href=/recipes/{slug}`). Связь товар→категория — **текстовая**
+(`products.category = shop_categories.slug`, без FK), поэтому `category_name`
+достраивается отдельным запросом, а не PostgREST-embed'ом.
+
+**Картинки товаров:** бакет `avocado-kiss-photos` (§4), `products.image_path` /
+`shop_categories.hero_image_path`; разбор — `resolveProductImage()`. Тестовый
+сид — `image_path=null` → `MediaPlaceholder`.
+
+**Контент/посев:** через скилл `avocado-content-ops` (6 категорий, 36 товаров,
+4 picks, по 3 пары/чтения на товар). Правка — тем же скиллом; фаза B добавит
+секции магазина в `web.admin`.
