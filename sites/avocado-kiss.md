@@ -1,6 +1,6 @@
 # Avocado Kiss — архитектура сайта
 
-> Last updated: 2026-07-20 | Source project: avocado.kiss (AGENTS.md,
+> Last updated: 2026-08-01 | Source project: avocado.kiss (AGENTS.md,
 > sites/avocado-kiss/specs/2026-07-17-avocado-kiss-v1-design.md) — пути файлов
 > относятся к репозиторию `avocado.kiss/`
 
@@ -33,19 +33,23 @@ app/
 components/            # один компонент = файл + CSS Module; SVG-иконки — в icons/
   Header.tsx / CategoryNav (внутри Header) / MobileMenu.tsx  # шапка + навигация категорий
   HeroCarousel.tsx      # клиентская hero-карусель, GSAP-кроссфейд, автоплей, точки+стрелки
-  RecipeCard.tsx        # карточка рецепта: варианты large / medium / list / wide
-  EditorsPicks.tsx      # секция «Editor's Picks»: нумерованный список + sticky-карточка
+  RecipeCard.tsx        # унифицированная карточка: image-box с фикс-пропорцией (medium 4:3)
+                        #   + MediaPlaceholder-фолбэк без фото + hover→accent заголовок;
+                        #   варианты large/medium/list/wide. medium (сетка категории) с пропом
+                        #   tags показывает теги вместо (дублирующей) категории
+  TagLabels.tsx         # общий рендер меток-тегов «TAG | TAG» (Editor's Picks и карточки категории)
+  EditorsPicks.tsx      # секция «Editor's Picks»: нумерованный список + sticky-карточка (метки — TagLabels)
   NewsletterBlock.tsx / NewsletterForm.tsx  # декоративный блок рассылки (submit никуда не пишет)
   Footer.tsx            # подвал (текст из footer_settings)
   Reveal.tsx            # GSAP reveal-обёртка (prefers-reduced-motion учтён)
-  icons/                # ChevronLeftIcon, ChevronRightIcon, ClockIcon, MenuIcon, SearchIcon, UsersIcon
+  icons/                # ChevronLeft/Right, Clock, Menu, Search, Users + соц-иконки XIcon/PinterestIcon/InstagramIcon
 lib/
   supabase/client.ts / server.ts  # браузерный/серверный клиенты (db.schema='avocado_kiss'), тип DbClient
   content.ts            # fetchCategories, fetchCategoryBySlug, fetchHomeSlots (сгруппировано по слоту),
-                        # fetchRecipeBySlug, fetchRecipesByCategory, fetchRecipeSlugs,
-                        # fetchPageSeo, fetchFooterSettings
+                        # fetchRecipeBySlug, fetchRecipesByCategory (embed'ит recipe_tags → recipe.tags),
+                        # fetchEditorsPicks, fetchRecipeSlugs, fetchPageSeo, fetchFooterSettings
   images.ts             # resolveRecipeImage() (контракт путей картинок)
-  types.ts              # Recipe/Category/HomeSlot/PageSeo/FooterSettings, HOME_SLOTS
+  types.ts              # Recipe (+optional tags)/Category/Tag/Post/EditorPick/HomeSlot/PageSeo/FooterSettings, HOME_SLOTS
 supabase/migrations/    # единственное место изменения схемы БД (workflow — schema.md §7, история — §10)
 mockups/                # исходные SingleFile-макеты Lovable (home, recipe) — referencia для вёрстки
 ```
@@ -118,9 +122,12 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 **Категории vs теги** — разные сущности:
 - **Категории** (`categories`, поле `recipes.category`) — раздел рецепта,
   показываются в карточках (SEASONAL). Рецепт может относиться к нескольким.
-- **Теги** (`tags` + `recipe_tags`/`post_tags`) — сквозные метки контента
-  (LIFE, COMMUNITY), общие для всех типов. В Editor's Picks выводятся у
-  элемента через «\|» (`LIFE | COMMUNITY`).
+- **Теги** (`tags` + `recipe_tags`/`post_tags`) — сквозные метки контента,
+  общие для всех типов. Два пласта: журнальные (LIFE, COMMUNITY) и дескрипторы
+  блюда (Vegetarian, Quick, Comfort Food, …). Выводятся через «\|»
+  (`VEGETARIAN | QUICK`) общим компонентом `TagLabels` — в Editor's Picks и в
+  теле карточки на странице категории (там теги **заменяют** дублирующую
+  категорию; данные — `fetchRecipesByCategory` embed'ит `recipe_tags`).
 
 **Editor's Picks** (`fetchEditorsPicks`, компонент `EditorsPicks`): слоты
 `pick`/`pick_feature` разрешаются в рецепт или пост; выводятся заголовок,
@@ -141,9 +148,13 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 - Единственное поле картинки в v1 — `recipes.hero_image_path` (используется и
   как обложка карточки, и как hero-фото страницы рецепта); отдельного поля
   под картинку категории в v1 нет.
-- Битый/пустой путь → `resolveRecipeImage` возвращает `null`; карточки мозаики
-  и Editor's Picks рендерят брендовый плейсхолдер `MediaPlaceholder` (надпись
-  «Avocado Kiss» на бумажном градиенте) вместо пустого прямоугольника.
+- Битый/пустой путь → `resolveRecipeImage` возвращает `null`; карточки мозаики,
+  Editor's Picks и `RecipeCard` (сетка категории) рендерят брендовый плейсхолдер
+  `MediaPlaceholder` (надпись «Avocado Kiss» на бумажном градиенте) вместо
+  пустого прямоугольника — поэтому ячейки сетки категории не «схлопываются».
+- `RecipeCard` держит фикс-пропорцию image-box на `.imageWrap` (medium — 4:3,
+  large — 5:4, wide/portrait — 4:5), чтобы фото и плейсхолдер занимали одну
+  рамку и лента категории была ровной.
 
 ## 5. GSAP-анимации
 
@@ -172,8 +183,10 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 ## 6. Навигация и структура страниц
 
 - **Header**: sticky, blur-фон; строка поиска (декоративная — не работает,
-  `aria-label` для a11y), логотип по центру, кнопки поиска/меню на мобильном;
-  под ней — `CategoryNav` из `fetchCategories()` (сортировка `position, name`).
+  `aria-label` для a11y), логотип по центру; справа — соц-иконки
+  (X/Pinterest/Instagram, line-стиль под набор, ссылки на **домашние страницы
+  сервисов**, видны ≥768px), на мобильном справа — кнопка поиска; под шапкой —
+  `CategoryNav` из `fetchCategories()` (сортировка `position, name`).
 - **MobileMenu**: простое раскрытие (не отдельный диалог) — см. «Вне объёма v1»
   в спеке дизайна.
 - **Footer**: колонки Magazine/Follow + copyright из `footer_settings`; ссылки

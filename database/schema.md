@@ -1,6 +1,6 @@
 # База данных — Supabase (все сайты)
 
-> Last updated: 2026-07-23 | Source project: cozycorner (CLAUDE.md, docs/admin-app-spec.md, docs/page-content.md, docs/multisite-migration.md) + web.admin
+> Last updated: 2026-08-01 | Source project: cozycorner (CLAUDE.md, docs/admin-app-spec.md, docs/page-content.md, docs/multisite-migration.md) + web.admin
 
 Единый источник правды о структуре БД и контрактах с данными. Схема **версионируется
 миграциями в репозитории `cozycorner/supabase/migrations/`** — менять её из других мест
@@ -432,8 +432,11 @@ Editor's Picks (`pick` / `pick_feature`) — любой из двух типов
 Единая таксономия для всех типов контента (recipe/post/product). `id`,
 timestamps, `name` (unique), `slug` (автоген из name, unique), `position`.
 **Отличие от `categories`:** категории — раздел рецепта (несколько, в карточках
-как SEASONAL); теги — сквозные метки (LIFE, COMMUNITY), выводятся в Editor's
-Picks через «\|». Публичное чтение — все строки; запись — админ.
+как SEASONAL); теги — сквозные метки: журнальные (LIFE, COMMUNITY) и дескрипторы
+блюда (Vegetarian, Quick, Comfort Food, Healthy, Baking, Sweet, Brunch,
+Weeknight, Summer, Spring, No-Cook, Vegan — сид 0006). Выводятся через «\|»
+(`TagLabels`) в Editor's Picks и в теле карточки на страницах категорий (там
+теги заменяют дублирующую категорию). Публичное чтение — все строки; запись — админ.
 
 ### recipe_tags / post_tags — связи контент↔теги
 
@@ -492,7 +495,10 @@ zucchini и карточки главной из мокапов, `home_slots` н
 check-констрейнта `home_slots.slot` + демо-строка баннера; редизайн главной
 v2) · 0005 модель контента: `tags` + `recipe_tags` + `posts` + `post_tags`,
 полиморфные слоты (`home_slots.recipe_id` XOR `post_id`, check
-`num_nonnulls=1`), сид тегов picks (редизайн главной v2, Editor's Picks).
+`num_nonnulls=1`), сид тегов picks (редизайн главной v2, Editor's Picks) ·
+0006 больше контента категорий: теги-дескрипторы блюд + новые рецепты
+(Breakfast/Seafood были пусты) + бэкфилл hero-картинок (внешние URL) +
+привязка тегов к рецептам категорий.
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом
