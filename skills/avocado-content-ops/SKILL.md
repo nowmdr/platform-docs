@@ -1,6 +1,6 @@
 ---
 name: avocado-content-ops
-description: Operate the Avocado Kiss recipe magazine's content through the Supabase connector — add or edit recipes, categories, tags, blog posts, curate the home page (home_slots / Editor's Picks), edit footer & page SEO, and read the current state. Use for any "add a recipe", "put this on the home page", "edit this category", "tag this recipe", "what recipes do we have" request against the Avocado Kiss database (schema avocado_kiss). Teaches the project's philosophy and data conventions and enforces hard guardrails against structural / destructive changes. The live database schema (checked via the connector) is the source of truth; this skill is the operating manual. This is the AVOCADO KISS site, not CozyCorner — if a request is about the cozy-home-goods catalog, use the cozycorner-content-ops skill instead.
+description: Operate the Avocado Kiss recipe magazine's content through the Supabase connector — add or edit recipes, categories, tags, blog posts, Curated Shop products / shop categories / shop curation (Editors' picks, Pairs well with, Related reading), curate the home page (home_slots / Editor's Picks), edit footer & page SEO, and read the current state. Use for any "add a recipe", "add a shop product", "put this in Editors' picks", "put this on the home page", "edit this category", "tag this recipe", "what recipes/products do we have" request against the Avocado Kiss database (schema avocado_kiss). Teaches the project's philosophy and data conventions and enforces hard guardrails against structural / destructive changes. The live database schema (checked via the connector) is the source of truth; this skill is the operating manual. This is the AVOCADO KISS site, not CozyCorner — if a request is about the cozy-home-goods catalog, use the cozycorner-content-ops skill instead.
 ---
 
 # Avocado Kiss — Content Operations (Supabase connector)
@@ -21,8 +21,9 @@ request is ambiguous about which site it targets, **ask first**.
 **This skill teaches philosophy and conventions. The live database is the
 source of truth for exact structure.**
 
-The schema evolves (new columns, new content types — `posts`/`product` are
-still filling in). So:
+The schema evolves (new columns, new content types — `posts` is still a
+skeleton; the **Curated Shop** — `products` + `shop_categories` + three shop
+curation tables — shipped in migration `0007`). So:
 
 - **Before writing anything, inspect the real table** through the connector
   (`list_tables` with schema `avocado_kiss`, or `select * from
@@ -60,6 +61,11 @@ Things that matter for how you operate:
   (safe), **but `posts.is_published` and `home_slots.is_published` default to
   `true`** — a new post or home-slot goes **live immediately** unless you
   explicitly set `is_published = false`. Always set it explicitly.
+  ⚠️ **The Curated Shop has NO draft state at all.** None of the five shop tables
+  (`products`, `shop_categories`, `shop_editors_picks`, `product_pairings`,
+  `product_reading`) has an `is_published` column — they are public-read. **A
+  product or curation row is live the instant you insert it.** Tell the user that
+  before you create shop content, and confirm per §6.
 - **The home page is curated, not queried.** It is assembled from `home_slots`
   rows, not from "latest N recipes". Putting a recipe on the home page = adding
   a `home_slots` row (§3, §7).
@@ -101,6 +107,11 @@ them — they are how the data stays consistent.
     real `tags.id` (foreign keys, `on delete cascade`). To tag a recipe, insert
     `(recipe_id, tag_id, position)` rows — never a text field. Query real
     `tags.id` first; never invent ids.
+  - **Shop products link to their category by SLUG** (a third style — don't
+    confuse it with recipes). `products.category` (single text field) equals a
+    `shop_categories.slug` — **by slug, not by name**. No FK — a string match. Set
+    it to an existing `shop_categories.slug` or the product shows under no
+    category. (`shop_categories.name` is only the display label — never the key.)
 - **Categories ≠ tags** (they look similar but are different sensibilities):
   - **Categories** are the recipe's *section* (Breakfast, Seasonal, Seafood…),
     shown on cards and driving `/category/[slug]` archives and header nav.
@@ -122,7 +133,12 @@ them — they are how the data stays consistent.
   string match** (no FK).
 - **The database owns `slug`, `created_at`, `updated_at`.** Triggers generate
   `slug` from `title`/`name` (via `public.slugify`) and maintain timestamps.
-  **Never send these on insert.**
+  **Never send these on insert.** **Exception — the Curated Shop tables have no
+  such triggers.** `products` and `shop_categories` have **no slug trigger and no
+  `updated_at` column**; `slug` is `NOT NULL UNIQUE` with no default, so you
+  **must supply it yourself** — compute it explicitly (`select
+  public.slugify('Speckled Dinner Plate')`) and check it isn't already taken
+  before inserting. (The shop curation tables have no slug at all.)
 - **Empty optional fields are `null`, never empty strings.** Empty SEO/eyebrow/
   description fields intentionally fall back to code defaults.
 - **Publication gating.** `is_published` controls visibility; the public site
@@ -179,9 +195,12 @@ When in doubt, **prefer reading over writing**, and ask.
 1. **Restate the intent** in plain language ("You want a new recipe 'X' in
    category 'Seasonal', as a draft — right?").
 2. **Resolve dependencies with SELECTs first**: real `recipes.id` /
-   `posts.id` / `tags.id` values, existing `categories.name` (so you match, not
-   duplicate), existing slugs/titles (avoid duplicates), `media.path` for
-   images, and — for home-page work — the current rows in the target `slot`.
+   `posts.id` / `tags.id` / `products.id` values, existing `categories.name` /
+   `shop_categories.slug` (so you match, not duplicate), existing slugs/titles
+   (avoid duplicates — and for shop, compute the new `slug` and check it's free),
+   `media.path` for images, and — for home-page or shop-curation work — the
+   current rows in the target `slot` or curation table (and the category's
+   `item_count` if you're adding/removing a product).
 3. **Show the preview**: target `schema.table`, the operation, and the exact
    field values (or the SQL / connector call you'll run). For a home-page
    placement, show the `home_slots` row (slot, position, recipe_id/post_id,
@@ -190,9 +209,11 @@ When in doubt, **prefer reading over writing**, and ask.
 4. **Wait for an explicit "yes."** Do not execute on assumption.
 5. **Execute** — insert the parent, capture its `id`, then insert children
    (tag joins, home_slots rows) referencing it.
-6. **Report back**: what was created/changed, the generated slug, draft vs
-   published, and where to see it (public URL pattern, e.g. `/recipes/<slug>`,
-   `/category/<slug>`, home page `/`).
+6. **Report back**: what was created/changed, the slug (generated for recipes,
+   supplied by you for shop), draft vs published (and for shop: **live now — no
+   draft**), and where to see it (public URL pattern, e.g. `/recipes/<slug>`,
+   `/category/<slug>`, `/product/<slug>`, `/shop/<category-slug>`, `/shop`, home
+   page `/`).
 
 ## 7. Entity operations reference
 
@@ -250,10 +271,51 @@ are in schema `avocado_kiss`.
   Fields today: `title`, `slug` (don't send), `excerpt`, `hero_image_path`,
   `is_published` (defaults **true**), `published_at`. Usable for Editor's Picks
   placements now; treat as provisional and flag if asked to do more.
-- **product** — third content type, **not built yet**. If asked to add a
-  product/shop item, explain it doesn't exist in this schema yet (it's a future
-  migration) and offer the recipe/post paths instead.
-- **pages** — SEO for fixed routes. Currently a single `home` row.
+- **Curated Shop** (5 tables, migration `0007`) — the affiliate storefront:
+  routes `/shop`, `/shop/[category]`, `/product/[slug]`; products link out to
+  where you buy them. It does **not** follow every recipe convention — the two
+  shop-wide rules from §1/§3 apply to all five tables: **(a) no draft state** (no
+  `is_published` anywhere — a row is live on insert), and **(b) you supply
+  `slug`** on `products`/`shop_categories` (no trigger). Details per entity:
+  - **products** — the storefront items. Columns: `slug` (`NOT NULL UNIQUE` — you
+    supply it via `slugify`), `title` (NOT NULL), `price` (`numeric`, NOT NULL — a
+    bare number like `32.00`, no currency symbol; the site formats it),
+    `referral_url` (NOT NULL — the outbound "Buy from …" link), `brand` (nullable
+    — card eyebrow, e.g. "Clay & Co."), `description` (nullable — product-page
+    body), `image_path` (nullable — same flat-key/external-URL contract as recipe
+    `hero_image_path`, bucket `avocado-kiss-photos`; empty → placeholder),
+    `category` (nullable text = a `shop_categories.slug` — **by slug, not name**,
+    §3). No `is_published`, no `updated_at`. Adding/removing a product → **update
+    the category's `item_count`** (see below).
+  - **shop_categories** — the storefront sections (`/shop/[slug]`). Columns:
+    `slug` (`NOT NULL UNIQUE` — you supply it), `name` (NOT NULL — display, e.g.
+    "Ceramics & Table"), `position` (grid/order), `item_count` (NOT NULL —
+    ⚠️ see cascade), optional `hero_eyebrow`/`hero_title`/`hero_description`/
+    `hero_image_path` (category-page hero; empty → code fallbacks), optional
+    `seo_title`/`seo_description`.
+  - **⚠️ `shop_categories.item_count` is a STORED counter you keep in sync.** It
+    is a plain column (no trigger); the hub `/shop` prints it as "N items". After
+    any add/remove of a product in a category, set that category's `item_count` to
+    the real number: `select count(*) from avocado_kiss.products where category =
+    '<slug>'`. This cascade is yours to own — like renaming a category cascades to
+    `recipes.category`. (Moving it to a trigger is a future migration, not a
+    connector edit.)
+  - **shop_editors_picks** — the "Editors' picks this month" strip on `/shop`.
+    Row = `(product_id, position)`. **`UNIQUE(product_id)`** — a product can be a
+    pick at most once. To feature: `select` current picks for a free `position`,
+    then insert one row referencing a real `products.id`.
+  - **product_pairings** — "Pairs well with" on a product page. Row =
+    `(product_id, paired_product_id, position)`. FK both → `products.id`;
+    **`UNIQUE(product_id, paired_product_id)`** + **`CHECK(product_id <>
+    paired_product_id)`** (no self-pair, no dupes). **Directional** — A→B does not
+    imply B→A; insert both rows if you want it mutual.
+  - **product_reading** — "Related reading" on a product page: links a product to
+    **real recipes**. Row = `(product_id, recipe_id, position)`. FK →
+    `products.id` and **`recipes.id`**; `UNIQUE(product_id, recipe_id)`. Point it
+    only at **published** recipes — the site embeds `recipes!inner` filtered to
+    `is_published = true`, so an unpublished recipe silently drops out. Resolve
+    real `recipes.id` with a SELECT first; never invent ids.
+- **pages** — SEO for fixed routes. Currently `home` and `shop` rows.
   **Update-only** (`seo_title`, `seo_description`, `og_image_path`); no
   create/delete. (Unlike CozyCorner there are no `hero_sections`/body/markdown
   fields here.)
@@ -297,6 +359,20 @@ Use these to answer "what do we have" and to ground writes:
   is_published from avocado_kiss.home_slots order by slot, position;`
 - Posts: `select title, is_published, published_at, slug from
   avocado_kiss.posts order by published_at desc limit 50;`
+- Shop catalog: `select p.title, p.brand, p.price, p.category, p.slug from
+  avocado_kiss.products p order by p.created_at desc limit 50;`
+- Shop categories + live counts (spot `item_count` drift): `select c.slug,
+  c.name, c.position, c.item_count, (select count(*) from avocado_kiss.products p
+  where p.category = c.slug) as actual from avocado_kiss.shop_categories c order
+  by c.position;`
+- Current Editors' picks: `select ep.position, p.title from
+  avocado_kiss.shop_editors_picks ep join avocado_kiss.products p on p.id =
+  ep.product_id order by ep.position;`
+- A product's pairings / related reading: `select pr.position, x.title from
+  avocado_kiss.product_pairings pr join avocado_kiss.products x on x.id =
+  pr.paired_product_id where pr.product_id = '<id>' order by pr.position;` ·
+  `select r.title from avocado_kiss.product_reading rd join avocado_kiss.recipes
+  r on r.id = rd.recipe_id where rd.product_id = '<id>' order by rd.position;`
 - Find an image key: `select path, original_name from avocado_kiss.media where
   original_name ilike '%zucchini%';`
 

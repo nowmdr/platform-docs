@@ -27,6 +27,9 @@ app/
   page.tsx                 # home: hero-карусель + курируемая сетка + Editor's Picks + newsletter
   recipes/[slug]/page.tsx  # страница рецепта (SSG+ISR): meta, image, Ingredients/Method
   category/[slug]/page.tsx # архив категории (SSG+ISR): заголовок + сетка RecipeCard
+  shop/page.tsx            # хаб Curated Shop (SSG+ISR): ShopHero + сетка категорий + Editors' picks
+  shop/[category]/page.tsx # категория магазина (SSG+ISR): ShopHero + ShopFilters + ProductGrid
+  product/[slug]/page.tsx  # товар (SSG+ISR): ProductDetail + «Pairs well with» + «Related reading»
   not-found.tsx            # глобальная 404
   sitemap.ts               # sitemap.xml из БД (ISR 60s): главная + категории + опубл. рецепты
   robots.ts                # robots.txt: allow all + sitemap
@@ -39,19 +42,32 @@ components/            # один компонент = файл + CSS Module; SV
                         #   tags показывает теги вместо (дублирующей) категории
   TagLabels.tsx         # общий рендер меток-тегов «TAG | TAG» (Editor's Picks и карточки категории)
   EditorsPicks.tsx      # секция «Editor's Picks»: нумерованный список + sticky-карточка (метки — TagLabels)
+  # --- Curated Shop (магазин) ---
+  ProductCard.tsx       # карточка товара (brand/name/price/Shop) — общая: хаб, категория, «Pairs well with»
+  ShopCategoryCard.tsx / ShopCategoryGrid.tsx  # «Shop by category»: image + name + «N items»
+  ShopHero.tsx          # hero /shop и /shop/[category] (eyebrow + h1 + p + фон)
+  EditorsPicksProducts.tsx  # «Editors' picks this month» (4 ProductCard) — НЕ путать с EditorsPicks (рецепты)
+  ProductGrid.tsx       # клиентская сетка 3×3 + кнопка Load more (браузерный fetchProductsPage, дедуп по id)
+  ShopFilters.tsx       # декоративная панель фильтров (в v1 не работает)
+  ProductDetail.tsx     # товар: image + brand + title + description + price + «Buy from …» + бэклинк
+  RelatedProducts.tsx / RelatedReading.tsx  # «Pairs well with» (товары) / «Related reading» (рецепты)
   NewsletterBlock.tsx / NewsletterForm.tsx  # декоративный блок рассылки (submit никуда не пишет)
   Footer.tsx            # подвал (текст из footer_settings)
   Reveal.tsx            # GSAP reveal-обёртка (prefers-reduced-motion учтён)
-  icons/                # ChevronLeft/Right, Clock, Menu, Search, Users + соц-иконки XIcon/PinterestIcon/InstagramIcon
+  icons/                # ChevronLeft/Right, ArrowLeft (бэклинк товара), Clock, Menu, Search, Users + соц-иконки XIcon/PinterestIcon/InstagramIcon
 lib/
   supabase/client.ts / server.ts  # браузерный/серверный клиенты (db.schema='avocado_kiss'), тип DbClient
   content.ts            # fetchCategories, fetchCategoryBySlug, fetchHomeSlots (сгруппировано по слоту),
                         # fetchRecipeBySlug, fetchRecipesByCategory (embed'ит recipe_tags → recipe.tags),
                         # fetchEditorsPicks, fetchRecipeSlugs, fetchPageSeo, fetchFooterSettings
-  images.ts             # resolveRecipeImage() (контракт путей картинок)
-  types.ts              # Recipe (+optional tags)/Category/Tag/Post/EditorPick/HomeSlot/PageSeo/FooterSettings, HOME_SLOTS
+  images.ts             # resolveRecipeImage() (контракт путей картинок рецептов)
+  shop.ts               # загрузчики магазина: fetchShopCategories/…/fetchProductsPage/fetchEditorsPicks/
+                        #   fetchProductPairings/fetchRelatedReading + resolveProductImage/formatPrice/productPath
+                        #   (НЕ server-only — ProductGrid зовёт fetchProductsPage из браузера)
+  types.ts              # Recipe/Category/Tag/Post/EditorPick/HomeSlot/PageSeo/FooterSettings + HOME_SLOTS;
+                        #   Product/ShopCategory/ReadingItem + SHOP_PAGE_SIZE (магазин)
 supabase/migrations/    # единственное место изменения схемы БД (workflow — schema.md §7, история — §10)
-mockups/                # исходные SingleFile-макеты Lovable (home, recipe) — referencia для вёрстки
+mockups/                # исходные SingleFile-макеты Lovable: v1 (home, recipe) + version-2/ (home v2, shop) — referencia для вёрстки
 ```
 
 Папки `docs/` в репозитории нет — вся документация в `platform-docs/` (этот файл).
@@ -68,10 +84,18 @@ mockups/                # исходные SingleFile-макеты Lovable (home
   home читает `pages` (slug `home`) через `fetchPageSeo`, рецепт — свои
   `seo_title`/`seo_description` (фолбэк `title`/`excerpt`), категория — свои
   `seo_title`/`seo_description` (фолбэк — автоформула из `name`).
-- `sitemap.ts` включает главную, все категории и все опубликованные рецепты
-  (по `fetchRecipeSlugs`, без фильтра — таблица `recipes` отдаёт всё в анон,
-  RLS ограничивает чтение полностью; см. schema.md §3 про `is_published`).
-  `robots.ts` — allow all + ссылка на sitemap.
+- `sitemap.ts` включает главную, `/shop`, все категории рецептов и магазина
+  (`/category/[slug]`, `/shop/[slug]`), все опубликованные рецепты
+  (`/recipes/[slug]`) и все товары (`/product/[slug]`). Рецепты грузятся
+  `fetchRecipeSlugs` (анон видит только опубликованные — RLS `is_published`);
+  категории и товары — публичные целиком. `robots.ts` — allow all + ссылка на
+  sitemap.
+- ⚠️ **Правило: любой новый или изменённый публичный роут обновляет
+  `app/sitemap.ts` в том же изменении** (и `generateStaticParams` страницы, если
+  роут динамический). Sitemap строится из БД-загрузчиков (`lib/content.ts`,
+  `lib/shop.ts`) — добавил тип контента с публичной страницей → добавь его слаги
+  в sitemap. Не полагайся на память: сверь список папок-роутов в `app/` с
+  записями `sitemap.ts`.
 
 ## 3. Курирование главной — модель `home_slots`
 
@@ -190,7 +214,9 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
   `aria-label` для a11y), логотип по центру; справа — соц-иконки
   (X/Pinterest/Instagram, line-стиль под набор, ссылки на **домашние страницы
   сервисов**, видны ≥768px), на мобильном справа — кнопка поиска; под шапкой —
-  `CategoryNav` из `fetchCategories()` (сортировка `position, name`).
+  `CategoryNav` из `fetchCategories()` (сортировка `position, name`), а следом —
+  статические пункты **Articles** (архив блога, в работе) и **Curated Shop**
+  (`/shop`). Оба варианта шапки (`Header` и `MobileMenu`) содержат эти ссылки.
 - **MobileMenu**: простое раскрытие (не отдельный диалог) — см. «Вне объёма v1»
   в спеке дизайна.
 - **Footer**: колонки Magazine/Follow + copyright из `footer_settings`; ссылки
