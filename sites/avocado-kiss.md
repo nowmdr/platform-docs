@@ -28,7 +28,7 @@ app/
   recipes/[slug]/page.tsx  # страница рецепта (SSG+ISR): meta, image, Ingredients/Method
   category/[slug]/page.tsx # архив категории (SSG+ISR): заголовок + сетка RecipeCard
   shop/page.tsx            # хаб Curated Shop (SSG+ISR): ShopHero + сетка категорий + Editors' picks
-  shop/[category]/page.tsx # категория магазина (SSG+ISR): ShopHero + ShopFilters + ProductGrid
+  shop/[category]/page.tsx # категория магазина (SSG+ISR): ShopHero + ShopCatalog (ShopFilters + ProductGrid)
   product/[slug]/page.tsx  # товар (SSG+ISR): ProductDetail + «Pairs well with» + «Related reading»
   not-found.tsx            # глобальная 404
   sitemap.ts               # sitemap.xml из БД (ISR 60s): главная + категории + опубл. рецепты
@@ -47,8 +47,9 @@ components/            # один компонент = файл + CSS Module; SV
   ShopCategoryCard.tsx / ShopCategoryGrid.tsx  # «Shop by category»: image + name + «N items»
   ShopHero.tsx          # hero /shop и /shop/[category] (eyebrow + h1 + p + фон)
   EditorsPicksProducts.tsx  # «Editors' picks this month» (4 ProductCard) — НЕ путать с EditorsPicks (рецепты)
-  ProductGrid.tsx       # клиентская сетка 3×3 + кнопка Load more (браузерный fetchProductsPage, дедуп по id)
-  ShopFilters.tsx       # декоративная панель фильтров (в v1 не работает)
+  ProductGrid.tsx       # клиентская сетка 3×3 + Load more (браузерный fetchProductsPage, дедуп по id); перезагружается при смене filters
+  ShopFilters.tsx       # контролируемая панель фильтров (Brand/Price/Sort + Clear) — значения/onChange от ShopCatalog
+  ShopCatalog.tsx       # композиция: держит выбор селектов, транслирует в ProductQuery для ProductGrid (паттерн cozycorner)
   ProductDetail.tsx     # товар: image + brand + title + description + price + «Buy from …» + бэклинк
   RelatedProducts.tsx / RelatedReading.tsx  # «Pairs well with» (товары) / «Related reading» (рецепты)
   NewsletterBlock.tsx / NewsletterForm.tsx  # декоративный блок рассылки (submit никуда не пишет)
@@ -61,8 +62,9 @@ lib/
                         # fetchRecipeBySlug, fetchRecipesByCategory (embed'ит recipe_tags → recipe.tags),
                         # fetchEditorsPicks, fetchRecipeSlugs, fetchPageSeo, fetchFooterSettings
   images.ts             # resolveRecipeImage() (контракт путей картинок рецептов)
-  shop.ts               # загрузчики магазина: fetchShopCategories/…/fetchProductsPage/fetchEditorsPicks/
-                        #   fetchProductPairings/fetchRelatedReading + resolveProductImage/formatPrice/productPath
+  shop.ts               # загрузчики магазина: fetchShopCategories/…/fetchProductsPage/fetchShopFilterOptions/fetchEditorsPicks/
+                        #   fetchProductPairings/fetchRelatedReading + resolveProductImage/formatPrice/productPath;
+                        #   типы ProductQuery (categorySlug/brand/priceMin/priceMax/sort) + ProductSort
                         #   (НЕ server-only — ProductGrid зовёт fetchProductsPage из браузера)
   types.ts              # Recipe/Category/Tag/Post/EditorPick/HomeSlot/PageSeo/FooterSettings + HOME_SLOTS;
                         #   Product/ShopCategory/ReadingItem + SHOP_PAGE_SIZE (магазин)
@@ -278,13 +280,20 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
   `item_count`) + «Editors' picks this month» (`fetchEditorsPicks`, 4 товара).
   SEO и hero-баннер — из одной строки `pages.shop` (`fetchPageSeo('shop')`).
 - `/shop/[category]` — страница категории: `ShopHero` из полей `shop_categories`
-  (`generateStaticParams` ← `fetchShopCategorySlugs`) + статичная панель
-  `ShopFilters` (декоративная, фильтрация в v1 не работает) + `ProductGrid`.
-  `ProductGrid` рендерит первую страницу (9, сетка 3×3) на сервере и догружает
-  следующие кнопкой **Load more** через браузерный `fetchProductsPage(supabase,
-  {categorySlug, page})`; дедуп по `id`; кнопка прячется, когда пришло
-  < `SHOP_PAGE_SIZE`. Порядок «Newest first» детерминирован (`created_at desc,
-  id desc` — как cozycorner).
+  (`generateStaticParams` ← `fetchShopCategorySlugs`) + `ShopCatalog` = рабочая
+  панель `ShopFilters` + `ProductGrid` (паттерн cozycorner `ShopCatalog`).
+  Фильтры: **Brand** (реальные бренды категории через `fetchShopFilterOptions(client,
+  categorySlug)`), **Price** (диапазоны Under $30 / $30–$60 / $60 and up), **Sort**
+  (Newest / Price ↑ / Price ↓) + кнопка **Clear** (видна, когда что-то выбрано).
+  `ShopCatalog` держит выбор в клиентском состоянии (**без URL-параметров** — как
+  cozycorner) и транслирует его в `ProductQuery`; смена фильтров сбрасывает сетку и
+  грузит её заново с первой страницы. Категория страницы — постоянный фильтр поверх
+  выбора. `ProductGrid` рендерит первую страницу (9, сетка 3×3) на сервере и
+  догружает следующие кнопкой **Load more** через браузерный
+  `fetchProductsPage(supabase, {categorySlug, page, ...filters})`; дедуп по `id`;
+  кнопка прячется, когда пришло < `SHOP_PAGE_SIZE`. Порядок «Newest first»
+  детерминирован (`created_at desc, id desc`); сортировки по цене — `price` +
+  вторичный ключ `id desc`.
 - `/product/[slug]` — страница товара (`generateStaticParams` ←
   `fetchProductSlugs`): `ProductDetail` (`fetchProductBySlug`, `category_name`
   для эйброу/бэклинка достраивается lookup'ом к `shop_categories`) +
