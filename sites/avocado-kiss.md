@@ -138,8 +138,26 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 
 Три типа контента (post types):
 1. **recipe** (рецепт) — таблица `recipes`, свой single-page `/recipes/[slug]`.
-2. **post** (пост блога) — таблица `posts` (скелет; финальный дизайн/поля позже),
-   single-page `/archive/[slug]` (в работе); в шапке ведёт пункт **Articles**.
+2. **post** (пост блога) — таблица `posts` + динамические секции тела
+   `post_sections` + авторы `authors`; архив `/blog` (баннер+бокс `ShopHero` из
+   строки `pages.blog` — hero_eyebrow/title/description/image, мигр. 0010, фолбэк
+   на код-константу; фильтр по тегам + Load more) и single-page `/blog/[slug]`;
+   в шапке ведёт пункт
+   **Article**. Данные — `lib/blog.ts` (`fetchPosts`/`fetchPostBySlug`/
+   `fetchPostSlugs`/`fetchPostSections`/`fetchRelatedReading`/`fetchBlogTags`).
+   Три шаблона (`posts.template`) реализованы: **essay** (полноэкранный hero +
+   отдельный byline), **interview** (сплит-hero, блок `qa`), **roundup**
+   (центрированный hero + широкая фигура с подписью `posts.hero_caption`, блок
+   `list_item` с номером + вложенной карточкой рецепта). byline/share у essay —
+   отдельной полосой (`ArticleByline`), у interview/roundup — внутри hero
+   (`ArticleMeta`). Hero-вариант выбирается `ArticleHero` по `template`.
+   **Блоки тела** (`post_sections`, единая таблица, дискриминант `type`,
+   порядок `position`): `text` (вариант lead/body), `quote`, `image`,
+   `recipe_card` (FK → recipes), `qa`, `list_item` — переиспользуемые, редактор
+   добавляет в любом порядке (компонент-диспетчер `PostSections`). Hero-эйброу —
+   теги поста через « · ». **Read also** (`fetchRelatedReading`) — гибрид: ручные
+   пины `post_related` (полиморфно recipe/post) сверху, затем авто-добор постами
+   (общий тег → свежесть), затем рецептами до 3 карточек.
 3. **product** (товар) — по образцу cozycorner; **ещё не реализован**, заведём
    позже; пункт шапки **Curated Shop** (`/shop`).
 
@@ -253,10 +271,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
 
 **Маршруты (все SSG + ISR `revalidate = 60`):**
 
-- `/shop` — хаб: `ShopHero` (редакционная константа) + сетка категорий
+- `/shop` — хаб: `ShopHero` из hero-полей строки `pages.shop`
+  (`hero_eyebrow`/`hero_title`/`hero_description`/`hero_image_path`, мигр. 0010;
+  фолбэк на код-константу `HUB_HERO`, если поле пусто) + сетка категорий
   (`fetchShopCategories`, сортировка `position, name`, «N items» из
   `item_count`) + «Editors' picks this month» (`fetchEditorsPicks`, 4 товара).
-  SEO — `fetchPageSeo('shop')` (строка `pages.shop`).
+  SEO и hero-баннер — из одной строки `pages.shop` (`fetchPageSeo('shop')`).
 - `/shop/[category]` — страница категории: `ShopHero` из полей `shop_categories`
   (`generateStaticParams` ← `fetchShopCategorySlugs`) + статичная панель
   `ShopFilters` (декоративная, фильтрация в v1 не работает) + `ProductGrid`.

@@ -445,21 +445,58 @@ Join-таблицы many-to-many: `(recipe_id|post_id, tag_id)` PK + `position`
 `product_tags` появится вместе с товарами. Публичное чтение — все строки
 (видимость гейтит сам рецепт/пост).
 
-### posts — посты блога (скелет)
+### posts — посты блога
 
-2-й тип контента (финальные поля/дизайн — позже). `id`, timestamps,
-`published_at`, `is_published`, `title`, `slug` (автоген из title, unique),
-`excerpt`, `hero_image_path` (тот же контракт картинок, что и у рецептов).
-Публичное чтение — только опубликованные; запись — админ. Единый single-page
-для блога — маршрут `/archive/[slug]` (в работе).
+2-й тип контента. `id`, timestamps, `published_at`, `is_published`, `title`,
+`slug` (автоген из title, unique), `excerpt`, `hero_image_path` (тот же контракт
+картинок). Миграция 0008 добавила: `template` (check `essay|interview|roundup`,
+default essay — управляет вариантом hero/лэйаута), `author_id` (FK → authors),
+`subtitle` (dek), `read_minutes` (int, «N min read»), `seo_title`,
+`seo_description`. Миграция 0009 добавила `hero_caption` (подпись hero-фигуры для
+roundup). Публичное чтение — только опубликованные; запись — админ.
+Архив `/blog`, single `/blog/[slug]`. Загрузчики — `lib/blog.ts`.
+
+### authors — авторы постов (миграция 0008)
+
+`id`, `created_at`, `name`, `slug` (автоген из name, unique — задел под
+`/author/[slug]`), `avatar_path` (контракт картинок), `bio`. Публичное чтение —
+все; запись — админ. `posts.author_id` → authors.
+
+### post_sections — блоки тела поста (миграция 0008)
+
+**Единая таблица** динамических переупорядочиваемых блоков (в отличие от модели
+«таблица на тип» у cozycorner — здесь один `type` + типизированные nullable
+колонки, один `position`). Общие: `id`, timestamps, `post_id` (FK → posts, on
+delete cascade), `position`, `is_published`, `type` (check
+`text|quote|image|recipe_card|qa|list_item`). Колонки по типам: text — `body`,
+`text_variant` (check lead|body); quote — `quote`, `quote_attribution`; image —
+`image_path`, `caption`, `credit`; recipe_card — `recipe_id` (FK → recipes, on
+delete set null), `card_eyebrow`; qa — `question`, `answer`; list_item — `rank`,
+`heading` (+ переиспользует `body` и `recipe_id`/`card_eyebrow`). Индексы
+`(post_id, position)` и `(recipe_id)`. Публичное чтение — `is_published`; запись
+— админ. Загрузка — `fetchPostSections` (один запрос + гидрация рецептов одним
+`.in()`), диспетчер `PostSections`. Реализованы essay-блоки
+(text/quote/image/recipe_card); qa/list_item — задел под interview/roundup.
+
+### post_related — «Read also» (миграция 0008)
+
+Ручные пины связанного чтения, полиморфно: `id`, `post_id` (FK → posts, on
+delete cascade), `position`, `recipe_id` (FK → recipes), `related_post_id` (FK →
+posts) с check `num_nonnulls(recipe_id, related_post_id) = 1`. Публичное чтение —
+все; запись — админ. `fetchRelatedReading` = пины сверху + авто-добор
+(посты по общему тегу/свежести, затем рецепты) до 3 карточек.
 
 ### pages — страницы + SEO
 
-Фиксированный набор из 2 строк (`home`, `shop`) — create/delete нет. `id`,
-timestamps, `slug` (unique), `seo_title`, `seo_description`, `og_image_path`
-(§4). Строка `shop` добавлена миграцией 0007 (SEO хаба `/shop`). В отличие от
-cozycorner здесь нет `hero_sections`/`body` — v1 не имеет отдельного
-hero-контента для статических страниц и markdown-полей.
+Фиксированный набор из 3 строк (`home`, `shop`, `blog`) — create/delete нет.
+`id`, timestamps, `slug` (unique), `seo_title`, `seo_description`,
+`og_image_path` (§4). Строка `shop` — миграция 0007, `blog` — 0010. Миграция
+0010 добавила **hero-баннер** для страниц `/shop` и `/blog`: `hero_eyebrow`,
+`hero_title`, `hero_description`, `hero_image_path` (плоский ключ бакета или URL;
+null → плейсхолдер) — раньше текст был захардкожен в `app/shop|blog/page.tsx`
+(`HUB_HERO`/`HERO`), теперь страницы читают строку `pages` с фолбэком на эти
+константы. У строки `home` баннера нет (мозаика). Markdown-полей/`body` по-прежнему
+нет.
 
 ### footer_settings — текст футера (singleton, одна строка)
 
@@ -558,7 +595,16 @@ v2) · 0005 модель контента: `tags` + `recipe_tags` + `posts` + `p
 `product_pairings` + `product_reading` (по образцу `home_slots`; RLS/гранты
 шаблона 0001) + строка `pages.shop`. Посев (6 категорий, 36 товаров
 `image_path=null`, 4 picks, по 3 пары/чтения на товар → опубликованные рецепты)
-— через `avocado-content-ops`, не миграцией.
+— через `avocado-content-ops`, не миграцией. · 0008 блог (Article): `authors`,
+расширение `posts` (`template`/`author_id`/`subtitle`/`read_minutes`/seo-поля),
+единая таблица блоков тела `post_sections` (все 6 типов в check), `post_related`
+(Read also, полиморфно) + RLS/гранты шаблона 0005 + сид demo-essay «The quiet art
+of the weeknight table» (8 секций). Роуты `/blog`, `/blog/[slug]`; nav «Article». ·
+0009 `posts.hero_caption` + demo-посты interview («Recipes are just letters to
+strangers», блоки qa) и roundup («20 pies…», блоки list_item) + теги
+Interview/People/Test Kitchen + автор «The Test Kitchen». · 0010 hero-баннер в
+`pages` (`hero_eyebrow`/`hero_title`/`hero_description`/`hero_image_path` для
+`/shop` и `/blog`) + строка `pages.blog` + сид текущей копии.
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом

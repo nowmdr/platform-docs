@@ -1,6 +1,6 @@
 ---
 name: avocado-content-ops
-description: Operate the Avocado Kiss recipe magazine's content through the Supabase connector — add or edit recipes, categories, tags, blog posts, Curated Shop products / shop categories / shop curation (Editors' picks, Pairs well with, Related reading), curate the home page (home_slots / Editor's Picks), edit footer & page SEO, and read the current state. Use for any "add a recipe", "add a shop product", "put this in Editors' picks", "put this on the home page", "edit this category", "tag this recipe", "what recipes/products do we have" request against the Avocado Kiss database (schema avocado_kiss). Teaches the project's philosophy and data conventions and enforces hard guardrails against structural / destructive changes. The live database schema (checked via the connector) is the source of truth; this skill is the operating manual. This is the AVOCADO KISS site, not CozyCorner — if a request is about the cozy-home-goods catalog, use the cozycorner-content-ops skill instead.
+description: Operate the Avocado Kiss recipe magazine's content via the Supabase connector — add/edit recipes, categories, tags, blog posts (3 templates + reorderable body blocks: text/quote/image/recipe-card/qa/list-item), Curated Shop products / categories / curation (Editors' picks, Pairs well with, Related reading), curate the home page (home_slots / Editor's Picks), edit footer & page SEO, and read current state. Use for any "add a recipe", "add a shop product", "add a blog post", "put this in Editors' picks", "put this on the home page", "tag this recipe", "what do we have" request against the Avocado Kiss database (schema avocado_kiss). Teaches the project's conventions and enforces hard guardrails against structural/destructive changes; the live schema (via the connector) is the source of truth. This is AVOCADO KISS, not CozyCorner — for the cozy-home-goods catalog use the cozycorner-content-ops skill instead.
 ---
 
 # Avocado Kiss — Content Operations (Supabase connector)
@@ -21,9 +21,10 @@ request is ambiguous about which site it targets, **ask first**.
 **This skill teaches philosophy and conventions. The live database is the
 source of truth for exact structure.**
 
-The schema evolves (new columns, new content types — `posts` is still a
-skeleton; the **Curated Shop** — `products` + `shop_categories` + three shop
-curation tables — shipped in migration `0007`). So:
+The schema evolves (new columns, new content types — the **Blog (Article)**
+model — `posts` + `authors` + `post_sections` + `post_related` — shipped in
+migrations `0008`/`0009`; the **Curated Shop** — `products` + `shop_categories`
++ three shop curation tables — shipped in migration `0007`). So:
 
 - **Before writing anything, inspect the real table** through the connector
   (`list_tables` with schema `avocado_kiss`, or `select * from
@@ -123,6 +124,18 @@ them — they are how the data stays consistent.
   posts, a recipe's `ingredients` and `steps` are **inline `text[]` arrays** on
   the `recipes` row. Array order = display order (steps render as 01, 02, …).
   There is no separate ingredients/steps table.
+- **A blog post, by contrast, has reorderable body sections.** A `posts` row
+  carries the article's *frame* (template, hero, byline via `author_id`); its
+  *body* is an ordered list of **`post_sections`** rows — **one table**, `type`
+  as the discriminant, `position` for order — of six block kinds
+  (text/quote/image/recipe_card/qa/list_item), addable in any order and quantity.
+  Post = **three independent axes**: **template** (`posts.template` —
+  `essay`/`interview`/`roundup`, changes ONLY the hero layout, not the body),
+  **tags** (`post_tags`, exactly like `recipe_tags`), and **sections**. The hero
+  **eyebrow is the tags** joined ` · ` — the template name is *not* shown (a
+  roundup can read "BAKING"). Authors are a real table (`authors`,
+  `posts.author_id` FK). "Read also" auto-fills on the site; `post_related` holds
+  optional manual pins. Full write recipe: §7 → Blog.
 - **Images are relative flat keys or external URLs.** `hero_image_path` (the
   only image field in v1 — used both as card cover and recipe hero) and
   `pages.og_image_path` store either a bare key inside the `avocado-kiss-photos`
@@ -212,8 +225,8 @@ When in doubt, **prefer reading over writing**, and ask.
 6. **Report back**: what was created/changed, the slug (generated for recipes,
    supplied by you for shop), draft vs published (and for shop: **live now — no
    draft**), and where to see it (public URL pattern, e.g. `/recipes/<slug>`,
-   `/category/<slug>`, `/product/<slug>`, `/shop/<category-slug>`, `/shop`, home
-   page `/`).
+   `/category/<slug>`, `/blog/<slug>`, `/blog`, `/product/<slug>`,
+   `/shop/<category-slug>`, `/shop`, home page `/`).
 
 ## 7. Entity operations reference
 
@@ -266,11 +279,57 @@ are in schema `avocado_kiss`.
   `pick`/`pick_feature` feed Editor's Picks and may point to a recipe **or** a
   post. To feature something: pick the slot, `select` current rows to choose a
   `position`, insert one row with exactly one of `recipe_id`/`post_id`.
-- **posts** — blog articles: the **second content type, still a skeleton**
-  (0 rows; final fields/design TBD, route `/archive/[slug]` in progress).
-  Fields today: `title`, `slug` (don't send), `excerpt`, `hero_image_path`,
-  `is_published` (defaults **true**), `published_at`. Usable for Editor's Picks
-  placements now; treat as provisional and flag if asked to do more.
+- **Blog (Article) posts** — the second content type (migrations `0008`/`0009`):
+  archive `/blog`, single `/blog/[slug]`, header nav "Article". A post is **three
+  independent axes** — a template, tags, and a body of reorderable sections.
+  - **posts** (the frame). Key fields: `template` (**CHECK**
+    `essay`|`interview`|`roundup` — drives ONLY the hero layout; default
+    `essay`), `author_id` (FK → `authors`), `title`, `slug` (don't send —
+    trigger), `excerpt` (card + SEO fallback — fill it), `subtitle` (dek shown in
+    interview/roundup heroes; leave `null` for essay), `read_minutes` (int, "N min
+    read"; `null` → hidden), `hero_image_path` (§3 contract), `hero_caption`
+    (caption under the roundup hero figure; `null` otherwise), optional
+    `seo_title`/`seo_description`, `is_published` (⚠️ **defaults `true`** — set
+    **`false`** for a draft), `published_at`. **Template → which extra fields
+    matter:** *essay* none; *interview* `subtitle`; *roundup* `subtitle` +
+    `hero_caption`.
+  - **authors** — real table (`name`, `slug` don't-send, `avatar_path` §3
+    contract, `bio`). Reuse an existing author (`select id, name from
+    avocado_kiss.authors`) or insert one, then set `posts.author_id`. The avatar
+    shows only in the **essay** byline; interview/roundup print the name only.
+  - **Tagging** = `post_tags` rows (identical to `recipe_tags`: FK `tags.id` +
+    `position`). The hero **eyebrow is the tags** joined ` · `; the template name
+    is never auto-added — want "Interview · People" shown? Tag the post with those
+    tags. Query real `tags.id` first; never invent ids.
+  - **Body = `post_sections`** — one table, one row per block, ordered by
+    `position` (0-based, gap-free). Every row carries `post_id`, `position`,
+    `is_published` (default `true`; `false` hides the block on the site — use to
+    stage), `type`, and only that type's columns (the rest `null`). **Any block
+    type works in any template** (blocks are independent of the template). The six
+    block components:
+
+    | `type` | Columns to fill | Renders as |
+    |---|---|---|
+    | `text` | `body` (paragraphs split on a blank line — markdown-lite), `text_variant` (`lead`\|`body`, default `body`) | prose; `lead` = larger, lighter intro |
+    | `quote` | `quote`, `quote_attribution` (opt) | centered italic pull-quote |
+    | `image` | `image_path` (§3 contract), `caption`, `credit` | `<figure>` + caption line |
+    | `recipe_card` | `recipe_id` (FK → a real **published** recipe), `card_eyebrow` (opt — overrides the word "Recipe") | card linking to `/recipes/<slug>` |
+    | `qa` | `question`, `answer` | interview Q → A pair |
+    | `list_item` | `rank` (int), `heading`, `body`, `recipe_id` (opt), `card_eyebrow` (opt) | numbered roundup item + embedded recipe card |
+
+    ⚠️ `recipe_card`/`list_item` `recipe_id` must point at a **published** recipe:
+    the site hydrates recipes under RLS, so an unpublished one silently shows no
+    card. Resolve the real `recipes.id` with a SELECT first.
+  - **post_related** — optional manual "Read also" pins. Row = `(post_id,
+    position, recipe_id` **XOR** `related_post_id)` (CHECK `num_nonnulls=1`).
+    Leave empty and the site auto-fills (sibling posts by shared tag → recency,
+    then recipes). Add rows only to force specific cards to the top.
+  - **To create a post** (write in this order, each step previewed per §6):
+    ① resolve or insert the **author** → ② insert the **posts** row (`template`,
+    the template's fields, `is_published=false` for a draft; don't send `slug`) →
+    capture its `id` → ③ insert **post_tags** → ④ insert **post_sections** in
+    `position` order (0,1,2,…) with the correct columns per `type` → ⑤ optional
+    **post_related**. Report the generated slug and `/blog/<slug>`.
 - **Curated Shop** (5 tables, migration `0007`) — the affiliate storefront:
   routes `/shop`, `/shop/[category]`, `/product/[slug]`; products link out to
   where you buy them. It does **not** follow every recipe convention — the two
@@ -315,10 +374,17 @@ are in schema `avocado_kiss`.
     only at **published** recipes — the site embeds `recipes!inner` filtered to
     `is_published = true`, so an unpublished recipe silently drops out. Resolve
     real `recipes.id` with a SELECT first; never invent ids.
-- **pages** — SEO for fixed routes. Currently `home` and `shop` rows.
-  **Update-only** (`seo_title`, `seo_description`, `og_image_path`); no
-  create/delete. (Unlike CozyCorner there are no `hero_sections`/body/markdown
-  fields here.)
+- **pages** — per-route settings for fixed routes: rows `home`, `shop`, `blog`
+  (migration `0010` added `blog`). **Update-only** — no create/delete.
+  - **SEO**: `seo_title`, `seo_description`, `og_image_path`.
+  - **Hero banner** (the white text-box-over-image at the top of `/shop` and
+    `/blog`): `hero_eyebrow`, `hero_title`, `hero_description`, `hero_image_path`
+    (§3 image contract — flat bucket key or external URL; `null` → branded
+    placeholder background, which is the current state). **To put a photo on the
+    shop or blog banner** (or change its text): `update avocado_kiss.pages set
+    hero_image_path = '<key-or-url>' where slug = 'shop'` (or `'blog'`). Empty hero
+    text falls back to a code constant. The `home` row has no banner (it uses the
+    mosaic) — its hero fields stay `null`.
 - **footer_settings** — singleton (one row), **update-only**. Footer text
   (`tagline`, `copyright`, `made_with`), social URLs (`instagram_url`,
   `pinterest_url`, `telegram_url`, `rss_url`), and the decorative newsletter
@@ -357,8 +423,15 @@ Use these to answer "what do we have" and to ground writes:
   rt.position;`
 - Current home page: `select slot, position, recipe_id, post_id, eyebrow,
   is_published from avocado_kiss.home_slots order by slot, position;`
-- Posts: `select title, is_published, published_at, slug from
+- Posts: `select template, title, is_published, published_at, slug from
   avocado_kiss.posts order by published_at desc limit 50;`
+- A post's body (sections in order): `select position, type, coalesce(heading,
+  question, left(coalesce(body, quote, caption), 48)) as preview from
+  avocado_kiss.post_sections where post_id = '<id>' order by position;`
+- A post's tags: `select t.name from avocado_kiss.post_tags pt join
+  avocado_kiss.tags t on t.id = pt.tag_id where pt.post_id = '<id>' order by
+  pt.position;`
+- Authors: `select id, name, slug from avocado_kiss.authors order by name;`
 - Shop catalog: `select p.title, p.brand, p.price, p.category, p.slug from
   avocado_kiss.products p order by p.created_at desc limit 50;`
 - Shop categories + live counts (spot `item_count` drift): `select c.slug,

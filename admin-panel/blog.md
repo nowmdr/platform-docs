@@ -1,6 +1,11 @@
-# Раздел Blog / SEO Posts — правила и концепции
+# Раздел Blog / SEO Posts (cozycorner) — правила и концепции
 
 > Last updated: 2026-07-17 | Source project: web.admin (docs/blog.md) — пути `src/…` относятся к репозиторию `web.admin/`
+>
+> ⚠️ Этот файл — про блог **cozycorner** (модель «таблица на тип секции» +
+> `post_type` blog/seo). Блог **Avocado Kiss** — другая модель (единая
+> `post_sections` + 3 шаблона поста + блоки qa/list_item): см.
+> [blog-avocado-kiss.md](blog-avocado-kiss.md). Не смешивать.
 
 Документ фиксирует, как устроен раздел Blog админки: контракты с данными,
 поведение операций и решения по UI, принятые в ходе разработки (2026-07-10;
