@@ -230,19 +230,20 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 
 ## 6. Навигация и структура страниц
 
-- **Header**: sticky, blur-фон; строка поиска (декоративная — не работает,
-  `aria-label` для a11y), логотип по центру; справа — соц-иконки
-  (X/Pinterest/Instagram, line-стиль под набор, ссылки на **домашние страницы
-  сервисов**, видны ≥768px), на мобильном справа — кнопка поиска; под шапкой —
-  `CategoryNav` из `fetchCategories()` (сортировка `position, name`), а следом —
-  статические пункты **Articles** (архив блога, в работе) и **Curated Shop**
-  (`/shop`). Оба варианта шапки (`Header` и `MobileMenu`) содержат эти ссылки.
+- **Header**: sticky, blur-фон; слева — **рабочая** строка поиска (десктоп,
+  ≥768px), логотип по центру; справа — соц-иконки (X/Pinterest/Instagram,
+  line-стиль под набор, ссылки на **домашние страницы сервисов**, видны ≥768px) и
+  **иконка-триггер поиска** (мобайл, <768px, открывает полноэкранный оверлей — как
+  в cozycorner); под шапкой — `CategoryNav` из `fetchCategories()` (сортировка
+  `position, name`), а следом — статические пункты **Articles** (архив блога, в
+  работе) и **Curated Shop** (`/shop`). Оба варианта шапки (`Header` и
+  `MobileMenu`) содержат эти ссылки. Глобальный поиск — §9.
 - **MobileMenu**: простое раскрытие (не отдельный диалог) — см. «Вне объёма v1»
   в спеке дизайна.
 - **Footer**: колонки Magazine/Follow + copyright из `footer_settings`; ссылки
   Magazine (About, Contributors, Contact, Issue Archive) — без страниц-
   адресатов в v1 (декоративные).
-- Поиск в шапке — нерабочий рендер в v1; функциональность — вне объёма.
+- Глобальный поиск в шапке — реализован (§9).
 
 ## 7. Окружение и деплой
 
@@ -314,3 +315,60 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
 **Контент/посев:** через скилл `avocado-content-ops` (6 категорий, 36 товаров,
 4 picks, по 3 пары/чтения на товар). Правка — тем же скиллом; фаза B добавит
 секции магазина в `web.admin`.
+
+## 9. Глобальный поиск
+
+Поиск по всему сайту (порт из cozycorner). **Обычный ilike-подстрочный поиск
+через PostgREST `.or()`** — RPC/FTS/`pg_trgm` для текущего размера каталога не
+нужны, отдельных миграций/индексов нет. Данные — `lib/search.ts` (**не**
+`server-only`: те же функции работают и в браузере — live-панель в шапке, — и на
+сервере — страница `/search`). Функции принимают `client: DbClient` аргументом.
+
+**Что ищется (5 типов, порядок выдачи — рецепты первыми):**
+рецепты → категории рецептов → статьи блога → товары → категории магазина.
+
+| Функция | Таблица | Поля (`.or()` ilike) | Фильтр | Сортировка |
+|---|---|---|---|---|
+| `searchRecipes` | `recipes` | title, excerpt, category, author_name | `is_published=true` | `published_at desc, id desc` |
+| `searchCategories` | `categories` | name | — | `position, name` |
+| `searchPosts` | `posts` | title, excerpt | `is_published=true` (у posts **нет** `post_type`) | `published_at desc, id desc` |
+| `searchProducts` | `products` | title, description, brand | — (нет `is_published`; наличие = живой) | `created_at desc, id desc` |
+| `searchShopCategories` | `shop_categories` | name | — | `position, name` |
+
+- `sanitizeSearchQuery` — обрезает до 100 символов, заменяет ломающие `.or()`
+  символы `,()` пробелами, экранирует спецсимволы LIKE `\ % _`; пустая строка на
+  выходе = «поиска нет». `searchPath(q)` → `/search?q=…`. `SearchResult<T> =
+  { items, total }` (`count:"exact"` — для счётчиков и «See all N»). Лимиты —
+  константы `SEARCH_*_LIMIT` + `SEARCH_DROPDOWN_LIMIT=5` / `SEARCH_OVERLAY_LIMIT=10`.
+- `searchProducts` **не** достраивает `category_name` (ни строка выпадашки, ни
+  `ProductCard` его не используют) — лишний lookup к `shop_categories` не делается.
+
+**UI — `components/SearchBox.tsx`** (`"use client"`): общий хук `useSiteSearch`
+(query + debounce 300ms + стоп-контроль устаревших ответов `seqRef` + сброс при
+навигации) и две поверхности, переключаемые по брейкпоинту **768px** (совпадает с
+шапкой):
+
+- **Десктоп (≥768px)** — `SearchBox` (default export): инлайн-инпут слева в шапке
+  + live-панель `#header-search-results`. `Enter` → `/search`, `Escape` / клик вне
+  закрывают панель.
+- **Мобайл (<768px)** — `SearchMobile` (named export): иконка-триггер **справа** в
+  шапке → полноэкранный оверлей (`role="dialog"`, блокировка прокрутки фона,
+  автофокус). Крестик/`Escape` закрывают.
+- Активна всегда только видимая поверхность (у скрытой query пустой → без
+  запросов), поэтому дублирования запросов нет.
+- **Cmd/Ctrl+K** (расширение сверх cozycorner): фокус инпута на десктопе / открытие
+  оверлея на мобайле.
+- Миниатюры строк: `resolveRecipeImage` (рецепты/статьи/категории магазина),
+  `resolveProductImage` (товары); у категорий рецептов картинки нет → плитка-
+  заглушка.
+
+**Страница `/search`** (`app/search/page.tsx`, RSC): динамическая (`await
+searchParams`), `robots: { index: false }` — **намеренно не в `sitemap.ts`**. Hero
+(`ShopHero`) + сводка непустых групп + секции карточек в том же порядке
+(рецепты первыми), переиспользуют `RecipeCard`/`PostCard`/`ProductCard`/
+`ShopCategoryCard`; категории рецептов — лёгкие текст-карточки-ссылки.
+
+**Тесты:** `lib/search.test.ts` (unit: `sanitizeSearchQuery`, `searchPath`,
+`searchRecipes`), `e2e/search.spec.ts` (Playwright, :3100, live Supabase: десктоп
+выпадашка → `Enter` → `/search`, прямой переход, empty-state; мобайл триггер →
+оверлей → ввод → закрытие).
