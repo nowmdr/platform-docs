@@ -392,11 +392,17 @@ select упал бы; проверено: `has_column_privilege(anon, preview_to
 
 ### categories — категории навигации
 
-`id`, `created_at`, `name` (unique, not null), `slug` (unique, автоген из
-`name`), `position` (integer, default 0 — порядок ссылок в шапке),
+`id`, `created_at`, `name` (**unique**, not null — единственный уникальный ключ,
+на нём `on conflict`), `slug` (автоген из `name`; НЕ unique-constraint),
+`position` (integer, default 0 — порядок ссылок в шапке), `show_in_nav`
+(boolean, not null, default true — `false` убирает категорию из навигации шапки,
+но страница `/category/<slug>`, поиск и главная остаются доступны),
 `seo_title`, `seo_description` (nullable, фолбэк — автоформула из `name`).
-Публичное чтение — все строки (нужны для навигации). Рецепты привязаны по
-имени: `recipes.category = categories.name` (без FK).
+Публичное чтение — все строки. Навигация шапки фильтрует по `show_in_nav = true`
+(`fetchNavCategories`); страницы категорий и sitemap берут полный список
+(`fetchCategories`). Рецепты привязаны по имени: `recipes.category =
+categories.name` (без FK). Миграция `0011` добавила `show_in_nav` + категорию
+`Dinner`, скрыла `Seafood` из навигации.
 
 ### home_slots — курируемая главная
 
