@@ -26,7 +26,7 @@ app/
   globals.css              # дизайн-токены (:root) + @font-face Fira Sans + сброс
   page.tsx                 # home: hero-карусель + курируемая сетка + Editor's Picks + newsletter
   recipes/[slug]/page.tsx  # страница рецепта (SSG+ISR): meta, image, Ingredients/Method
-  category/[slug]/page.tsx # архив категории (SSG+ISR): заголовок + сетка RecipeCard
+  category/[slug]/page.tsx # архив категории (SSG+ISR): только сетка RecipeCard (без заголовка/эйброу)
   shop/page.tsx            # хаб Curated Shop (SSG+ISR): ShopHero + сетка категорий + Editors' picks
   shop/[category]/page.tsx # категория магазина (SSG+ISR): ShopHero + ShopCatalog (ShopFilters + ProductGrid)
   product/[slug]/page.tsx  # товар (SSG+ISR): ProductDetail + «Pairs well with» + «Related reading»
@@ -35,7 +35,7 @@ app/
   robots.ts                # robots.txt: allow all + sitemap
 components/            # один компонент = файл + CSS Module; SVG-иконки — в icons/
   Header.tsx / CategoryNav (внутри Header) / MobileMenu.tsx  # шапка + навигация категорий
-  HeroCarousel.tsx      # клиентская hero-карусель, GSAP-кроссфейд, автоплей, точки+стрелки
+  HeroCarousel.tsx      # клиентский hero-слайдер: GSAP-сдвиг трека (translateX), автоплей 10с, точки+стрелки
   RecipeCard.tsx        # унифицированная карточка: image-box с фикс-пропорцией (medium 4:3)
                         #   + MediaPlaceholder-фолбэк без фото + hover→accent заголовок;
                         #   варианты large/medium/list/wide. medium (сетка категории) с пропом
@@ -52,13 +52,14 @@ components/            # один компонент = файл + CSS Module; SV
   ShopCatalog.tsx       # композиция: держит выбор селектов, транслирует в ProductQuery для ProductGrid (паттерн cozycorner)
   ProductDetail.tsx     # товар: image + brand + title + description + price + «Buy from …» + бэклинк
   RelatedProducts.tsx / RelatedReading.tsx  # «Pairs well with» (товары) / «Related reading» (рецепты)
-  NewsletterBlock.tsx / NewsletterForm.tsx  # декоративный блок рассылки (submit никуда не пишет)
+  NewsletterBlock.tsx / NewsletterForm.tsx  # блок рассылки; форма валидирует e-mail на фронте (success/error), но в базу пока не пишет (задел на server action)
   Footer.tsx            # подвал (текст из footer_settings)
   Reveal.tsx            # GSAP reveal-обёртка (prefers-reduced-motion учтён)
   icons/                # ChevronLeft/Right, ArrowLeft (бэклинк товара), Clock, Menu, Search, Users + соц-иконки XIcon/PinterestIcon/InstagramIcon
 lib/
   supabase/client.ts / server.ts  # браузерный/серверный клиенты (db.schema='avocado_kiss'), тип DbClient
-  content.ts            # fetchCategories, fetchCategoryBySlug, fetchHomeSlots (сгруппировано по слоту),
+  content.ts            # fetchCategories (все), fetchNavCategories (только show_in_nav — для шапки),
+                        # fetchCategoryBySlug, fetchHomeSlots (сгруппировано по слоту),
                         # fetchRecipeBySlug, fetchRecipesByCategory (embed'ит recipe_tags → recipe.tags),
                         # fetchEditorsPicks, fetchRecipeSlugs, fetchPageSeo, fetchFooterSettings
   images.ts             # resolveRecipeImage() (контракт путей картинок рецептов)
@@ -206,17 +207,22 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 
 ## 5. GSAP-анимации
 
-- **`HeroCarousel`** (`components/HeroCarousel.tsx`, клиентский): слайды
-  наложены друг на друга (`position: absolute`), активный проявляется
-  GSAP-кроссфейдом (`autoAlpha`, `power2.inOut`, 900ms). Автоплей каждые 6с
-  с паузой при hover (`hovered` ref, не state — не триггерит лишний рендер);
-  точки + стрелки-кнопки переключают вручную. `prefers-reduced-motion` →
-  мгновенное переключение (`duration: 0`). Ширина: слайдер **во всю ширину**
-  вьюпорта с малыми отступами (`padding-inline: clamp(0.75rem,1.5vw,1.5rem)`),
-  без `.shell`-обёртки — в отличие от контентных секций (1320px). Высота (≥768):
-  не aspect-ratio, а `height: calc(100svh - 11.5rem)` (вычтены sticky-шапка
-  bar+nav 8rem, верхний отступ 2rem, зазор снизу), `min/max-height` — чтобы
-  слайдер целиком помещался во вьюпорт при первой загрузке.
+- **`HeroCarousel`** (`components/HeroCarousel.tsx`, клиентский): слайды выложены
+  в горизонтальный flex-**трек** (`.track`) внутри `overflow:hidden`-вьюпорта;
+  переключение — GSAP-сдвигом трека (`xPercent: -100*index`, `power2.inOut`,
+  600ms) — виден «проезд», не кроссфейд. **Бесшовный вперёд-луп:** за последним
+  слайдом рендерится клон первого; долистав до клона, `onComplete` мгновенно
+  снапит трек на слайд 0 (`gsap.set`). Автоплей каждые **10с** (`AUTOPLAY_MS`,
+  задел под настройку в админке) с паузой при hover (`hovered` ref) и `animating`
+  ref-гардом против наложения твинов; точки/стрелки — вручную. `prefers-reduced-
+  motion` → мгновенный сдвиг (`duration: 0`). Не текущие слайды (и клон) помечены
+  `aria-hidden` + `tabIndex=-1` — вне tab-order/скринридера. Ширина: слайдер
+  центрируется на `--hero-slider-max` (**1400px** — чуть шире контентного
+  `--shell-max` 1320px, но не во всю ширину), с малыми боковыми отступами
+  (`padding-inline: clamp(0.75rem,1.5vw,1.5rem)`). Высота (≥768): не aspect-ratio,
+  а `height: calc(100svh - 11.5rem)` (вычтены sticky-шапка bar+nav 8rem, верхний
+  отступ 2rem, зазор снизу), `min/max-height` — чтобы слайдер целиком помещался
+  во вьюпорт при первой загрузке.
 - **`Reveal`** (`components/Reveal.tsx`, клиентский): обёртка вокруг секций/
   карточек — GSAP `from()` (`autoAlpha: 0, y: 24`) через `ScrollTrigger`
   (`start: "top 88%", once: true`), `@gsap/react`'s `useGSAP` со `scope`.
@@ -230,19 +236,24 @@ Editor's Picks и могут ссылаться на рецепт **или** п�
 
 ## 6. Навигация и структура страниц
 
-- **Header**: sticky, blur-фон; слева — **рабочая** строка поиска (десктоп,
-  ≥768px), логотип по центру; справа — соц-иконки (X/Pinterest/Instagram,
+- **Header**: sticky, **сплошной непрозрачный фон** (`--background`, без blur —
+  чтобы при скролле контент не просвечивал); слева — **рабочая** строка поиска
+  (десктоп, ≥768px), логотип по центру; справа — соц-иконки (X/Pinterest/Instagram,
   line-стиль под набор, ссылки на **домашние страницы сервисов**, видны ≥768px) и
   **иконка-триггер поиска** (мобайл, <768px, открывает полноэкранный оверлей — как
-  в cozycorner); под шапкой — `CategoryNav` из `fetchCategories()` (сортировка
-  `position, name`), а следом — статические пункты **Articles** (архив блога, в
-  работе) и **Curated Shop** (`/shop`). Оба варианта шапки (`Header` и
-  `MobileMenu`) содержат эти ссылки. Глобальный поиск — §9.
+  в cozycorner); под шапкой — `CategoryNav` из **`fetchNavCategories()`** (только
+  `show_in_nav = true`, сортировка `position, name`), а следом — статические пункты
+  **Articles** (архив блога, в работе) и **Curated Shop** (`/shop`). Оба варианта
+  шапки (`Header` и `MobileMenu`) содержат эти ссылки. Скрытая из нав категория
+  (напр. `Seafood`, `show_in_nav=false`) остаётся доступна по `/category/<slug>`,
+  в поиске и на главной — страницы/sitemap берут полный `fetchCategories()`.
+  Глобальный поиск — §9.
 - **MobileMenu**: простое раскрытие (не отдельный диалог) — см. «Вне объёма v1»
   в спеке дизайна.
-- **Footer**: колонки Magazine/Follow + copyright из `footer_settings`; ссылки
-  Magazine (About, Contributors, Contact, Issue Archive) — без страниц-
-  адресатов в v1 (декоративные).
+- **Footer**: бренд + tagline, колонка Magazine (**About, Contact** — заглушки
+  `href="#"`, страниц-адресатов пока нет), колонка Follow (**Twitter, Pinterest,
+  Instagram** из `SOCIALS`), нижняя строка copyright/made_with из
+  `footer_settings`.
 - Глобальный поиск в шапке — реализован (§9).
 
 ## 7. Окружение и деплой
