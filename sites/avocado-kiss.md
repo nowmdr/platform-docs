@@ -25,7 +25,7 @@ app/
   layout.tsx              # root layout: Header + Footer, метаданные (SEO/OG), lang="en"
   globals.css              # дизайн-токены (:root) + @font-face Fira Sans + сброс
   page.tsx                 # home: hero-карусель + курируемая сетка + Editor's Picks + newsletter
-  recipes/[slug]/page.tsx  # страница рецепта (SSG+ISR): meta, image, Ingredients/Method
+  recipes/[slug]/page.tsx  # страница рецепта (SSG+ISR): meta, image, Ingredients/Method; кнопка Print recipe (см. §2.1)
   category/[slug]/page.tsx # архив категории (SSG+ISR): только сетка RecipeCard (без заголовка/эйброу)
   shop/page.tsx            # хаб Curated Shop (SSG+ISR): ShopHero + сетка категорий + Editors' picks
   shop/[category]/page.tsx # категория магазина (SSG+ISR): ShopHero + ShopCatalog (ShopFilters + ProductGrid)
@@ -99,6 +99,21 @@ mockups/                # исходные SingleFile-макеты Lovable: v1 (
   `lib/shop.ts`) — добавил тип контента с публичной страницей → добавь его слаги
   в sitemap. Не полагайся на память: сверь список папок-роутов в `app/` с
   записями `sitemap.ts`.
+
+### 2.1. Печать рецепта (Print recipe)
+
+- Кнопка **«Print recipe»** — внутри мета-бара рецепта, сразу после Cook time
+  (опциональный слот `action` у `RecipeMeta`). Компонент `PrintButton.tsx`
+  (`'use client'`) по клику вызывает `window.print()` — один клик, без
+  навигации и отдельной страницы.
+- Чистый вывод даёт **`@media print` в `app/recipes/[slug]/page.module.css`**:
+  скрываются глобальные `<header>`/`<footer>` (`:global(body > header/footer)`),
+  верхний рейтинг-бейдж, hero-картинка, `RatingSection` (обёрнут в
+  `.ratingSectionWrap`) и сама кнопка; контент — в одну колонку; белый фон;
+  `@page { margin: 16mm }`. Остаётся: категория → заголовок → описание → мета →
+  ингредиенты → шаги.
+- Отдельного `/print`-роута **нет** (был удалён как избыточный) — печатается
+  сама страница рецепта. Соответственно в `sitemap.ts` печать не добавляется.
 
 ## 3. Курирование главной — модель `home_slots`
 
