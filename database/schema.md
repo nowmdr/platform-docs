@@ -410,6 +410,13 @@ select упал бы; проверено: `has_column_privilege(anon, preview_to
 `display_avg`/`display_count` — вычисляемые (STORED), напрямую не пишутся; сайт
 читает только их (`Recipe.display_avg`/`display_count`).
 
+> Витрина ≠ БД: **число оценок, видимое на странице**, считается на клиенте
+> (`avocado.kiss/lib/rating.ts` → `socialProofCount`) — пока реальных ≤100
+> показывается стабильный псевдослучайный baseline 1–500 (детерминированно из
+> `recipe.id`), дальше — реальное `display_count`. В БД это не хранится.
+> `display_count`/`display_avg` остаются источником правды и идут в JSON-LD
+> `aggregateRating` (честные значения, только при `display_count > 0`).
+
 ### recipe_ratings — голоса за рецепт
 
 Одна строка на голос. `id`, `recipe_id` (FK → recipes), `value` (int, check

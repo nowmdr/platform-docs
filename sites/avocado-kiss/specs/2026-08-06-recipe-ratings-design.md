@@ -358,3 +358,61 @@ Changed:
 
 (`app/sitemap.ts` needs no change — no new public page route; the rate endpoint is
 an API route, not a page.)
+
+---
+
+## 13. Update 2026-08-07 — as-shipped changes
+
+These decisions were made during implementation and supersede the earlier text
+where noted. The shipped code and the `platform-docs` site/schema docs reflect
+this section.
+
+### 13.1 Displayed rating COUNT — social-proof baseline (supersedes §3 for count)
+
+§3 said the displayed count is `display_count` (`seed_count + ratings_count`). As
+shipped, the **on-page count** is instead computed by `socialProofCount(recipeId,
+realCount)` in `avocado.kiss/lib/rating.ts`:
+
+- While real ratings are `<= REAL_COUNT_THRESHOLD` (100): show a **stable
+  pseudo-random integer in 1..500**, derived deterministically from `recipe.id`
+  (FNV-style hash). Same id → same number across renders/reloads, so it never
+  flickers and never reads "0 Ratings".
+- Once real ratings are `> 100`: show the real `display_count`.
+- Applies to both `RatingBadge` (page computes it) and `RatingSection` (recomputes
+  from the POST response). It is a display-only number; nothing is stored in the DB.
+
+The DB `seed_count`/`seed_sum` columns remain (admin baseline for the **average**
+and available for Phase B), but the count shown to visitors now comes from
+`socialProofCount`, not from `seed_count`.
+
+The displayed **average** is unchanged: `display_avg` with the 4.1 floor.
+
+### 13.2 JSON-LD stays truthful
+
+`aggregateRating` JSON-LD uses the **real** `display_count`/`display_avg` (only
+when `display_count > 0`), never the social-proof number — publishing fabricated
+review counts in structured data violates Google's guidelines. The on-page
+social-proof count and the JSON-LD count therefore intentionally differ before a
+recipe has real votes (JSON-LD is simply absent then).
+
+### 13.3 Turnstile hardening
+
+`components/Turnstile.tsx` (dedicated `'use client'` wrapper): the site key is
+`.trim()`-ed (a stray space/newline triggers Cloudflare's "Invalid input for
+parameter sitekey"); adds `error-callback`/`expired-callback` that clear the token
+and log the CF error code; guards against double-render and removes the widget on
+unmount. `RatingSection` blocks submit until a token exists, showing an
+"unverified" message instead of firing a doomed request.
+
+### 13.4 Star picker interaction fix
+
+Hover flicker fixed by moving `onMouseLeave` from each star to the picker
+container (so moving between stars no longer flashes the fill to zero); short
+`color`/`transform` transitions and a `focus-visible` ring added. Arrow-key
+roving-focus within the radiogroup remains a noted follow-up (Tab + Enter/Space
+work today).
+
+### 13.5 Spacing
+
+Dropped the duplicate `.header { margin-top }` on the recipe page to tighten the
+gap between the site header/nav and the recipe content.

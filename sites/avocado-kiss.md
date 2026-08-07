@@ -391,8 +391,20 @@ searchParams`), `robots: { index: false }` — **намеренно не в `sit
 Отображаемое среднее **`display_avg` берётся с полом `min_display_rating`
 (default 4.1)** и может быть «затравлено» админом (`seed_count`/`seed_sum`) —
 модель данных и GENERATED-колонки в [../database/schema.md](../database/schema.md)
-§9 (`recipes` рейтинги, `recipe_ratings`, `rate_recipe`). При `display_count > 0`
-страница рецепта отдаёт JSON-LD `aggregateRating` (schema.org Recipe).
+§9 (`recipes` рейтинги, `recipe_ratings`, `rate_recipe`).
+
+**Отображаемое число оценок — не `display_count` напрямую.** Пока реальных
+оценок ≤100, показывается стабильное псевдослучайное число **1–500**,
+детерминированно выведенное из `recipe.id` (`socialProofCount` в
+`avocado.kiss/lib/rating.ts`) — одинаковое между рендерами/перезагрузками
+(не мигает) и никогда не «0 Ratings». Как только реальных оценок станет **>100**
+(`REAL_COUNT_THRESHOLD`) — показывается реальное `display_count`. Это чисто
+витринное число: в БД оно не хранится, применяется и к бейджу, и к секции.
+
+JSON-LD `aggregateRating` (schema.org Recipe) отдаётся только при
+`display_count > 0` и содержит **честный** реальный `display_count`/`display_avg`
+(не витринный 1–500) — иначе выдуманные счётчики отзывов в структурированных
+данных нарушают правила Google.
 
 Голоса пишутся через `POST /api/recipes/[slug]/rate` — **Route Handler, первая
 мутация в репозитории**: он проверяет токен Cloudflare Turnstile и пишет
