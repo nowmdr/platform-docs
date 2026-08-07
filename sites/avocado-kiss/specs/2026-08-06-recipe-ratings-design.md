@@ -416,3 +416,23 @@ work today).
 
 Dropped the duplicate `.header { margin-top }` on the recipe page to tighten the
 gap between the site header/nav and the recipe content.
+
+### 13.6 Badge placement, submit loader, hero, layout ownership
+
+Supersedes §1 and §7.1 where they say the badge sits *under* the title:
+
+- **Badge above the title.** `RatingBadge` now renders **above** the `<h1>`, just
+  under the category eyebrow (`.ratingTop` wrapper), not below the title.
+- **Submit loader + floating status.** While a vote is in flight the picked stars
+  stay lit and a spinner + "Sending your rating…" shows. The
+  submitting/error/unverified message is an **absolutely-positioned tooltip pill
+  below the stars** (inside a `position: relative` `.pickerWrap`) so it never
+  reflows the star row. The caret is a bordered rotated square so the pill's top
+  border stays continuous.
+- **Hero image shorter.** `.image` aspect-ratio `16/9` (mobile) / `2/1` (≥768px)
+  with `max-height: 60vh` so it never dominates on any viewport.
+- **Bottom-gap ownership.** `.article` has **no** `padding-bottom`; the trailing
+  `RatingSection` owns the page's bottom gap via a symmetric `padding-block`
+  (`1.25rem`, no breakpoint override), so its top and bottom spacing are equal and
+  identical on mobile/desktop. Do not re-add `padding-bottom` to `.article` — it
+  would double the bottom gap.
