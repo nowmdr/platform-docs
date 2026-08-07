@@ -390,6 +390,44 @@ select упал бы; проверено: `has_column_privilege(anon, preview_to
 | `seo_title` / `seo_description` | text (nullable) | пусто = фолбэк `title`/`excerpt` |
 | `folder_id` | uuid (nullable, FK → admin_folders, on delete set null) | папка админки |
 
+### recipes — рейтинги (звёзды)
+
+Оценки рецепта хранятся прямо на `recipes` как агрегаты + отдельная таблица
+голосов; отображаемое среднее — GENERATED-колонки (миграция `0012`).
+
+Новые колонки `recipes`:
+
+| Поле | Тип | Назначение |
+|---|---|---|
+| `ratings_count` | integer (not null, default 0) | число реальных голосов (read-only агрегат, растит только RPC) |
+| `ratings_sum` | integer (not null, default 0) | сумма реальных голосов (read-only агрегат) |
+| `seed_count` | integer (not null, default 0) | админский baseline: число «затравочных» голосов |
+| `seed_sum` | integer (not null, default 0) | админский baseline: сумма «затравочных» голосов |
+| `min_display_rating` | numeric(2,1) (default 4.1) | пер-рецептный пол отображаемой оценки |
+| `display_count` | integer GENERATED | `seed_count + ratings_count` |
+| `display_avg` | numeric GENERATED | `greatest(min_display_rating, round((seed_sum + ratings_sum) / display_count, 1))` — с полом; при `display_count = 0` → `min_display_rating` |
+
+`display_avg`/`display_count` — вычисляемые (STORED), напрямую не пишутся; сайт
+читает только их (`Recipe.display_avg`/`display_count`).
+
+### recipe_ratings — голоса за рецепт
+
+Одна строка на голос. `id`, `recipe_id` (FK → recipes), `value` (int, check
+`1..5`), `client_id` (идентификатор браузера для дедупа), `created_at`. RLS:
+только админ (read/write) — **публичного/анонимного доступа нет** (анон не читает
+и не пишет сырые голоса; сайт видит агрегаты через колонки `recipes`).
+
+### rate_recipe() — приём голоса (RPC)
+
+`avocado_kiss.rate_recipe(p_slug text, p_value int, p_client_id text)` —
+`security definer`; EXECUTE выдан **только** роли `service_role`. Вставляет голос
+в `recipe_ratings`, инкрементит агрегаты (`ratings_count`/`ratings_sum`) и
+возвращает `(display_avg, display_count)`. Вызывается серверным Route Handler
+`POST /api/recipes/[slug]/rate` под service-role ключом (см.
+[../sites/avocado-kiss.md](../sites/avocado-kiss.md)) — первая мутация в репозитории.
+
+Миграция: `avocado.kiss/supabase/migrations/0012_recipe_ratings.sql`.
+
 ### categories — категории навигации
 
 `id`, `created_at`, `name` (**unique**, not null — единственный уникальный ключ,

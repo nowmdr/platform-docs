@@ -379,6 +379,31 @@ searchParams`), `robots: { index: false }` — **намеренно не в `sit
 (рецепты первыми), переиспользуют `RecipeCard`/`PostCard`/`ProductCard`/
 `ShopCategoryCard`; категории рецептов — лёгкие текст-карточки-ссылки.
 
+## 10. Рейтинги рецептов (звёзды)
+
+Оценка рецептов на странице `/recipes/[slug]`. Две поверхности:
+
+- **Read-only бейдж** (`RatingBadge`) под заголовком рецепта — звёзды +
+  отображаемое среднее и число оценок.
+- **Интерактивный 5-звёздочный пикер** (`RatingSection`) в самом низу рецепта —
+  посетитель ставит оценку.
+
+Отображаемое среднее **`display_avg` берётся с полом `min_display_rating`
+(default 4.1)** и может быть «затравлено» админом (`seed_count`/`seed_sum`) —
+модель данных и GENERATED-колонки в [../database/schema.md](../database/schema.md)
+§9 (`recipes` рейтинги, `recipe_ratings`, `rate_recipe`). При `display_count > 0`
+страница рецепта отдаёт JSON-LD `aggregateRating` (schema.org Recipe).
+
+Голоса пишутся через `POST /api/recipes/[slug]/rate` — **Route Handler, первая
+мутация в репозитории**: он проверяет токен Cloudflare Turnstile и пишет
+service-role ключом через RPC `rate_recipe` (server-only секреты
+`SUPABASE_SECRET_KEY` + `TURNSTILE_SECRET_KEY`, никогда не `NEXT_PUBLIC_`).
+Дедуп «один голос на браузер» — **только localStorage** (UX-подсказка, на сервере
+не форсится). Это API-роут (не страница), нового публичного PAGE-роута нет —
+`sitemap.ts` не меняется.
+
+Спека: [avocado-kiss/specs/2026-08-06-recipe-ratings-design.md](avocado-kiss/specs/2026-08-06-recipe-ratings-design.md).
+
 **Тесты:** `lib/search.test.ts` (unit: `sanitizeSearchQuery`, `searchPath`,
 `searchRecipes`), `e2e/search.spec.ts` (Playwright, :3100, live Supabase: десктоп
 выпадашка → `Enter` → `/search`, прямой переход, empty-state; мобайл триггер →
