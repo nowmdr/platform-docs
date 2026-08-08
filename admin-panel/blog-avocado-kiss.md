@@ -1,8 +1,19 @@
 # Avocado Kiss — Blog (Article) editor — контракт для web.admin
 
-> Last updated: 2026-08-04 | Site: **avocado.kiss** (схема `avocado_kiss`, бакет
-> `avocado-kiss-photos`). Раздел в web.admin **ещё не построен** (Phase B) — этот
-> файл его контракт: по нему агент собирает форму «Blog».
+> Last updated: 2026-08-08 | Site: **avocado.kiss** (схема `avocado_kiss`, бакет
+> `avocado-kiss-photos`). Раздел в web.admin **ПОСТРОЕН** (2026-08-08) — этот файл
+> остаётся контрактом модели. Реализация: `web.admin/src/features/articles/*` +
+> `src/lib/articles.ts`; роут `/blog` диспетчеризуется по `site.schema`
+> (`features/articles/BlogRoutes.tsx`). Спека/план —
+> [../sites/avocado-kiss/specs/2026-08-08-blog-admin-design.md](../sites/avocado-kiss/specs/2026-08-08-blog-admin-design.md)
+> / [../sites/avocado-kiss/plans/2026-08-08-blog-admin.md](../sites/avocado-kiss/plans/2026-08-08-blog-admin.md).
+> Принятые решения: отдельная feature-папка; «Add block» + выбор типа; авторы —
+> только select существующих (CRUD авторов пока нет); папки постов — миграция 0015
+> (`posts.folder_id` + секция `posts`); Read-also пины реализованы. **Баннер /blog
+> (§5b) правится через новый avocado-Pages редактор** (`features/pages/
+> AvocadoPageEditPage.tsx`, диспетчер `PagesRoutes.tsx`) — у avocado `pages` баннер
+> в hero_* колонках строки, а не в `hero_sections` (cozy-модель). Preview-ссылки
+> нет (у avocado `posts` нет `preview_token`).
 >
 > ⚠️ Это НЕ [blog.md](blog.md) — тот про блог **cozycorner** (две таблицы секций
 > `post_text_sections`/`post_product_sections` + `post_type` blog/seo). У Avocado

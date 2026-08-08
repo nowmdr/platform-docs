@@ -123,6 +123,25 @@
     cozycorner и разрывов контракта админка↔сайт нет; `item_count` админка не пишет
     (триггер), картинка категории пишется в правильную колонку (`hero_image_path`
     для avocado через canonical `image_path`).
+- **Blog (Article) + Pages для Avocado Kiss (2026-08-08)** — раздел Blog построен
+  по контракту [blog-avocado-kiss.md](blog-avocado-kiss.md):
+  - Отдельная feature-папка `src/features/articles/` + `src/lib/articles.ts`
+    (единая таблица `post_sections`, 6 блоков, `posts.template` 3 шаблона, авторы,
+    теги, Read-also пины). Роут `/blog` диспетчеризуется по `site.schema`
+    (`BlogRoutes.tsx`) — cozycorner-блог не тронут. Конструктор блоков — «Add block»
+    + выбор типа; авторы — select существующих (CRUD авторов пока нет).
+  - Миграция avocado `0015`: `posts.folder_id` + секция `posts` в `admin_folders`
+    (папки списка постов).
+  - **avocado-специфичный раздел Pages** (`features/pages/AvocadoPageEditPage.tsx`,
+    диспетчер `PagesRoutes.tsx`): у avocado баннер в hero_* колонках строки `pages`
+    (не `hero_sections`+`body`, как cozy). Правит баннеры `/shop` и `/blog` (update-only,
+    у `home` баннера нет). Общий раздел Pages сломался бы на avocado — поэтому диспетчер.
+  - **Две правки по код-ревью:** (1) `toSections` пишет картинку блока `image` плоским
+    ключом бакета, а не абсолютным URL (иначе тихая порча БД + разрыв учёта медиа);
+    (2) Read-also пины — read-only чип рецепта (без мёртвых кнопок) + дедуп пикеров
+    (у `post_related` нет unique-констрейнта). Юнит-тесты: articles/articleForm/
+    ArticleEditPage/AvocadoPageEditPage — 71 зелёный, build+lint чисто.
+  - **Preview-ссылки нет** (у avocado `posts` нет `preview_token`).
 
 ## Отклонения от спеки (актуальные версии инструментов)
 

@@ -2410,6 +2410,507 @@ git commit -m "docs: avocado-kiss blog admin section built (contract + status)"
 
 ---
 
+## Task 13: avocado-specific Pages editor (баннер /blog и /shop) + диспетчер
+
+**Контекст (почему добавлено):** Task 11 выявил, что раздел Pages в админке построен
+под модель cozycorner (таблица `hero_sections` + колонка `body`), а у avocado
+`pages` баннер — это **колонки на строке** (`hero_eyebrow`/`hero_title`/
+`hero_description`/`hero_image_path`), таблицы `hero_sections` и колонки `body` у
+avocado НЕТ. Включение общего раздела Pages сломало бы его. Решение пользователя
+(2026-08-08): построить avocado-специфичный редактор Pages и диспетчеризовать роут
+`pages` по `site.schema` (как сделали для `blog`). Строки avocado `pages`: `home`,
+`shop`, `blog` (update-only). У `home` баннера нет (мозаика) — hero-секцию для него
+скрываем.
+
+**Files:**
+- Create: `web.admin/src/lib/avocadoPages.ts`
+- Create: `web.admin/src/features/pages/AvocadoPagesPage.tsx`
+- Create: `web.admin/src/features/pages/AvocadoPageEditPage.tsx`
+- Create: `web.admin/src/features/pages/PagesRoutes.tsx`
+- Create: `web.admin/src/features/pages/AvocadoPageEditPage.test.tsx`
+- Modify: `web.admin/src/App.tsx` (pages / pages/:pageId → диспетчер)
+- Modify: `web.admin/src/config/sites.ts` (вернуть `"pages"` в avocado sections)
+
+- [ ] **Step 1: Слой данных `src/lib/avocadoPages.ts`**
+
+```ts
+import type { SiteConfig } from "@/config/sites";
+import { getDb } from "@/lib/supabase";
+
+// Avocado pages: баннер (hero_*) — колонки на строке pages (не hero_sections,
+// как у cozycorner). Набор строк фиксирован (home/shop/blog): update-only.
+export type AvocadoPage = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  slug: string;
+  seo_title: string | null;
+  seo_description: string | null;
+  og_image_path: string | null;
+  hero_eyebrow: string | null;
+  hero_title: string | null;
+  hero_description: string | null;
+  hero_image_path: string | null;
+};
+
+export type AvocadoPageListItem = Pick<AvocadoPage, "id" | "slug" | "seo_title">;
+
+export type AvocadoPageInput = Pick<
+  AvocadoPage,
+  | "seo_title" | "seo_description" | "og_image_path"
+  | "hero_eyebrow" | "hero_title" | "hero_description" | "hero_image_path"
+>;
+
+const PAGE_COLUMNS =
+  "id,created_at,updated_at,slug,seo_title,seo_description,og_image_path,hero_eyebrow,hero_title,hero_description,hero_image_path";
+
+export async function listAvocadoPages(site: SiteConfig): Promise<AvocadoPageListItem[]> {
+  const { data, error } = await getDb(site)
+    .from("pages")
+    .select("id,slug,seo_title")
+    .order("slug", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AvocadoPageListItem[];
+}
+
+export async function getAvocadoPage(site: SiteConfig, id: string): Promise<AvocadoPage | null> {
+  const { data, error } = await getDb(site)
+    .from("pages").select(PAGE_COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw error;
+  return (data as AvocadoPage) ?? null;
+}
+
+// Update-only (create/delete нет — набор строк фиксирован). Возвращает свежую строку.
+export async function updateAvocadoPage(
+  site: SiteConfig, id: string, input: AvocadoPageInput,
+): Promise<AvocadoPage> {
+  const { data, error } = await getDb(site)
+    .from("pages").update(input).eq("id", id).select(PAGE_COLUMNS).single();
+  if (error) throw error;
+  return data as AvocadoPage;
+}
+```
+
+- [ ] **Step 2: Список `src/features/pages/AvocadoPagesPage.tsx`** (порт `PagesPage`, без Header-ссылки и heroCount)
+
+```tsx
+import { Link, useOutletContext } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import type { SiteConfig } from '@/config/sites'
+import { listAvocadoPages } from '@/lib/avocadoPages'
+import { Skeleton } from '@/components/ui/skeleton'
+
+// Список страниц avocado: фиксированный набор строк pages (home/shop/blog),
+// без поиска/создания и без cozy-«Header» (у avocado нет header_settings-редактора).
+export function AvocadoPagesPage() {
+  const site = useOutletContext<SiteConfig>()
+  const { data: pages, isPending, error } = useQuery({
+    queryKey: ['pages', site.slug],
+    queryFn: () => listAvocadoPages(site),
+  })
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-3">
+        <h1 className="text-lg font-semibold">Pages</h1>
+        {pages && <span className="text-sm text-muted-foreground">{pages.length}</span>}
+      </div>
+
+      {error && (
+        <p className="rounded-xl border border-destructive/50 p-4 text-sm text-destructive">
+          Failed to load pages: {error.message}
+        </p>
+      )}
+
+      {isPending && !error && (
+        <div className="flex flex-col gap-1">
+          {Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-9 w-full rounded-md" />)}
+        </div>
+      )}
+
+      {pages && pages.length > 0 && (
+        <ul className="flex flex-col">
+          {pages.map((page) => (
+            <li key={page.id}>
+              <Link to={page.id}
+                className="flex items-center justify-between gap-3 rounded-md px-3 py-2 transition-colors hover:bg-accent/50">
+                <span className="truncate text-sm font-medium">{page.slug}</span>
+                {page.seo_title && (
+                  <span className="max-w-72 truncate text-xs text-muted-foreground">{page.seo_title}</span>
+                )}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Редактор `src/features/pages/AvocadoPageEditPage.tsx`** (update-only; hero-секция скрыта для `home`)
+
+Порт структуры `ArticleForm` (sticky-панель, dirty-guard, image-пикер, SEO
+customize/reset, resync после Save), но проще: без секций/тегов, только Hero-баннер
+(скрыт для slug `home`) + SEO. Два image-поля (hero_image_path, og_image_path) —
+общий `ImagePickerDialog` с целью `pickerFor: 'hero' | 'og' | null`.
+
+```tsx
+import { useEffect, useRef, useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { Link, useBlocker, useNavigate, useOutletContext, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Images, Pencil, RotateCcw } from 'lucide-react'
+import { toast } from 'sonner'
+import type { SiteConfig } from '@/config/sites'
+import { getAvocadoPage, updateAvocadoPage, type AvocadoPage, type AvocadoPageInput } from '@/lib/avocadoPages'
+import { resolveImageUrl, toStoragePath } from '@/lib/images'
+import { firstFieldErrorMessage } from '@/lib/errors'
+import { ImagePickerDialog } from '@/features/products/ImagePickerDialog'
+import { ImagePreviewPicker } from '@/components/ImagePreviewPicker'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
+
+const pageSchema = z.object({
+  hero_eyebrow: z.string(),
+  hero_title: z.string(),
+  hero_description: z.string(),
+  hero_image_path: z.string().trim(),
+  seo_title: z.string(),
+  seo_description: z.string(),
+  og_image_path: z.string().trim(),
+})
+type PageFormValues = z.infer<typeof pageSchema>
+
+const orNull = (v: string) => (v.trim() ? v.trim() : null)
+
+function toInput(site: SiteConfig, v: PageFormValues): AvocadoPageInput {
+  return {
+    hero_eyebrow: orNull(v.hero_eyebrow),
+    hero_title: orNull(v.hero_title),
+    hero_description: orNull(v.hero_description),
+    hero_image_path: orNull(toStoragePath(site, v.hero_image_path.trim())),
+    seo_title: orNull(v.seo_title),
+    seo_description: orNull(v.seo_description),
+    og_image_path: orNull(toStoragePath(site, v.og_image_path.trim())),
+  }
+}
+
+function toFormValues(site: SiteConfig, p: AvocadoPage): PageFormValues {
+  return {
+    hero_eyebrow: p.hero_eyebrow ?? '',
+    hero_title: p.hero_title ?? '',
+    hero_description: p.hero_description ?? '',
+    hero_image_path: p.hero_image_path ? resolveImageUrl(site, p.hero_image_path) : '',
+    seo_title: p.seo_title ?? '',
+    seo_description: p.seo_description ?? '',
+    og_image_path: p.og_image_path ? resolveImageUrl(site, p.og_image_path) : '',
+  }
+}
+
+export function AvocadoPageEditPage() {
+  const site = useOutletContext<SiteConfig>()
+  const { pageId } = useParams()
+  const { data, isPending, error } = useQuery({
+    queryKey: ['pages', site.slug, pageId],
+    queryFn: () => getAvocadoPage(site, pageId!),
+    enabled: Boolean(pageId),
+  })
+
+  return (
+    <div className="flex flex-col gap-4">
+      {(error || (!isPending && !data)) && (
+        <Link to={`/${site.slug}/pages`} className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" /> Back to pages
+        </Link>
+      )}
+      {error && <p className="rounded-xl border border-destructive/50 p-4 text-sm text-destructive">Failed to load: {error.message}</p>}
+      {isPending && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+      {!isPending && !error && !data && (
+        <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">Page not found.</p>
+      )}
+      {data && <PageForm site={site} data={data} />}
+    </div>
+  )
+}
+
+function PageForm({ site, data }: { site: SiteConfig; data: AvocadoPage }) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const hasHero = data.slug !== 'home' // у home баннера нет (мозаика)
+  const form = useForm<PageFormValues>({ resolver: zodResolver(pageSchema), defaultValues: toFormValues(site, data) })
+  const { errors, isSubmitting, isDirty } = form.formState
+  const [pickerFor, setPickerFor] = useState<'hero' | 'og' | null>(null)
+  const [seoOpen, setSeoOpen] = useState(Boolean(data.seo_title || data.seo_description || data.og_image_path))
+  const leavingRef = useRef(false)
+
+  const heroPath = form.watch('hero_image_path').trim()
+  const ogPath = form.watch('og_image_path').trim()
+
+  const save = useMutation({
+    mutationFn: (values: PageFormValues) => updateAvocadoPage(site, data.id, toInput(site, values)),
+    onSuccess: (fresh) => {
+      form.reset(toFormValues(site, fresh))
+      queryClient.setQueryData(['pages', site.slug, fresh.id], fresh)
+      queryClient.invalidateQueries({ queryKey: ['pages', site.slug], exact: true })
+      toast.success('Page saved')
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to save page'),
+  })
+
+  const blocker = useBlocker(isDirty && !save.isPending)
+  function saveAndLeave() {
+    void form.handleSubmit(async (values) => {
+      leavingRef.current = true
+      try { await save.mutateAsync(values); blocker.proceed?.() } catch { blocker.reset?.() } finally { leavingRef.current = false }
+    }, () => blocker.reset?.())()
+  }
+  useEffect(() => {
+    if (!isDirty) return
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [isDirty])
+
+  function openSeo() { setSeoOpen(true) }
+  function resetSeo() {
+    form.setValue('seo_title', '', { shouldDirty: true })
+    form.setValue('seo_description', '', { shouldDirty: true })
+    form.setValue('og_image_path', '', { shouldDirty: true })
+    setSeoOpen(false)
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background py-2">
+        <Link to={`/${site.slug}/pages`} className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" /> Back to pages
+        </Link>
+        <span className="text-sm text-muted-foreground">/{data.slug}</span>
+        <div className="ml-auto">
+          <Button type="submit" form="page-form" disabled={isSubmitting || save.isPending}>
+            {save.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </div>
+      </div>
+
+      <form id="page-form"
+        onSubmit={form.handleSubmit((values) => save.mutate(values),
+          (errs) => toast.error(firstFieldErrorMessage(errs) ?? 'Please fix the highlighted fields'))}
+        noValidate className="flex max-w-3xl flex-col gap-6">
+        {hasHero && (
+          <FieldGroup>
+            <span className="text-sm font-medium">Hero banner</span>
+            <Field>
+              <FieldLabel htmlFor="hero_eyebrow">Eyebrow</FieldLabel>
+              <Input id="hero_eyebrow" {...form.register('hero_eyebrow')} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="hero_title">Title</FieldLabel>
+              <Input id="hero_title" {...form.register('hero_title')} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="hero_description">Description</FieldLabel>
+              <Textarea id="hero_description" rows={3} {...form.register('hero_description')} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="hero_image_path">Background image</FieldLabel>
+              <div className="max-w-xs">
+                <ImagePreviewPicker url={heroPath ? resolveImageUrl(site, heroPath) : null}
+                  alt="Hero background" aspect="video" objectFit="cover" onPick={() => setPickerFor('hero')} />
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Input id="hero_image_path" placeholder="flat key in bucket or external URL" {...form.register('hero_image_path')} />
+                <Button type="button" variant="outline" onClick={() => setPickerFor('hero')}><Images /> Gallery</Button>
+              </div>
+            </Field>
+          </FieldGroup>
+        )}
+
+        {!seoOpen ? (
+          <Field>
+            <FieldLabel>SEO</FieldLabel>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed p-3">
+              <p className="text-sm text-muted-foreground">Search engines use the site defaults.</p>
+              <Button type="button" variant="ghost" size="sm" onClick={openSeo}><Pencil /> Customize</Button>
+            </div>
+          </Field>
+        ) : (
+          <FieldGroup>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">SEO</span>
+              <Button type="button" variant="ghost" size="sm" onClick={resetSeo}><RotateCcw /> Use defaults</Button>
+            </div>
+            <Field>
+              <FieldLabel htmlFor="seo_title">SEO title</FieldLabel>
+              <Input id="seo_title" {...form.register('seo_title')} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="seo_description">SEO description</FieldLabel>
+              <Textarea id="seo_description" rows={3} {...form.register('seo_description')} />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="og_image_path">OG image</FieldLabel>
+              <div className="flex gap-2">
+                <Input id="og_image_path" placeholder="flat key in bucket or external URL" {...form.register('og_image_path')} />
+                <Button type="button" variant="outline" onClick={() => setPickerFor('og')}><Images /> Gallery</Button>
+              </div>
+            </Field>
+          </FieldGroup>
+        )}
+      </form>
+
+      <ImagePickerDialog site={site} open={pickerFor !== null}
+        onOpenChange={(open) => { if (!open) setPickerFor(null) }}
+        currentPath={pickerFor === 'hero' ? (heroPath ? toStoragePath(site, heroPath) : null)
+          : pickerFor === 'og' ? (ogPath ? toStoragePath(site, ogPath) : null) : null}
+        onSelect={(path) => {
+          if (pickerFor === 'hero') form.setValue('hero_image_path', resolveImageUrl(site, path), { shouldDirty: true })
+          else if (pickerFor === 'og') form.setValue('og_image_path', resolveImageUrl(site, path), { shouldDirty: true })
+        }} />
+
+      <AlertDialogGuard blocker={blocker} onSave={saveAndLeave} saving={save.isPending} />
+    </div>
+  )
+}
+```
+
+Внизу файла — общий guard-компонент (или инлайн `AlertDialog`, как в ArticleForm).
+Проще заинлайнить `AlertDialog` из `@/components/ui/alert-dialog` идентично блоку
+из `ArticleEditPage.tsx` (Discard unsaved changes → Stay/Discard/Save), заменив
+`AlertDialogGuard` на этот инлайн-блок. Скопировать блок дословно из
+`ArticleEditPage.tsx` (секция `<AlertDialog open={blocker.state === 'blocked'} …>`),
+привязав кнопку Save к `saveAndLeave`.
+
+- [ ] **Step 4: Диспетчер `src/features/pages/PagesRoutes.tsx`**
+
+```tsx
+import { useOutletContext } from 'react-router-dom'
+import type { SiteConfig } from '@/config/sites'
+import { PagesPage } from './PagesPage'
+import { PageEditPage } from './PageEditPage'
+import { AvocadoPagesPage } from './AvocadoPagesPage'
+import { AvocadoPageEditPage } from './AvocadoPageEditPage'
+
+// Модель pages зависит от сайта: avocado — hero_* колонки на строке pages
+// (Avocado*), прочие (cozycorner) — hero_sections + body (Page*).
+function isAvocado(site: SiteConfig) { return site.schema === 'avocado_kiss' }
+
+export function PagesListRoute() {
+  const site = useOutletContext<SiteConfig>()
+  return isAvocado(site) ? <AvocadoPagesPage /> : <PagesPage />
+}
+export function PagesEditRoute() {
+  const site = useOutletContext<SiteConfig>()
+  return isAvocado(site) ? <AvocadoPageEditPage /> : <PageEditPage />
+}
+```
+
+- [ ] **Step 5: Подключить в `App.tsx`**
+
+Заменить:
+```tsx
+// было:
+//   <Route path="pages" element={<PagesPage />} />
+//   <Route path="pages/header" element={<HeaderEditPage />} />
+//   <Route path="pages/:pageId" element={<PageEditPage />} />
+// стало (header оставить cozy-only — avocado на него не ссылается):
+<Route path="pages" element={<PagesListRoute />} />
+<Route path="pages/header" element={<HeaderEditPage />} />
+<Route path="pages/:pageId" element={<PagesEditRoute />} />
+```
+Импорт: добавить `import { PagesListRoute, PagesEditRoute } from '@/features/pages/PagesRoutes'`.
+`HeaderEditPage` остаётся импортированным (используется в `pages/header`).
+`PagesPage`/`PageEditPage` теперь импортируются в `PagesRoutes.tsx` — если в
+`App.tsx` они станут unused, убрать их импорты (`noUnusedLocals`).
+
+- [ ] **Step 6: Вернуть `"pages"` в avocado sections (`sites.ts`)**
+
+```ts
+    sections: ["media", "products", "categories", "brands", "blog", "pages"],
+```
+(Убрать предупреждающий комментарий про отсутствие pages — теперь редактор есть.)
+
+- [ ] **Step 7: Тест `AvocadoPageEditPage.test.tsx`**
+
+```tsx
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { SiteConfig } from '@/config/sites'
+import { getAvocadoPage, updateAvocadoPage } from '@/lib/avocadoPages'
+import { AvocadoPageEditPage } from './AvocadoPageEditPage'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/avocadoPages', async (io) => {
+  const actual = await io<typeof import('@/lib/avocadoPages')>()
+  return { ...actual, getAvocadoPage: vi.fn(), updateAvocadoPage: vi.fn() }
+})
+
+const site = {
+  slug: 'avocado-kiss', label: 'Avocado Kiss', projectUrl: 'https://demo.supabase.co',
+  anonKey: 'k', schema: 'avocado_kiss', bucket: 'avocado-kiss-photos',
+} as SiteConfig
+
+function page(slug: string) {
+  return {
+    id: 'pg1', created_at: '', updated_at: '', slug,
+    seo_title: null, seo_description: null, og_image_path: null,
+    hero_eyebrow: null, hero_title: null, hero_description: null, hero_image_path: null,
+  }
+}
+
+function renderAt(url: string) {
+  const qc = new QueryClient()
+  const router = createMemoryRouter(
+    [{ element: <Outlet context={site} />, children: [{ path: '/:siteSlug/pages/:pageId', element: <AvocadoPageEditPage /> }] }],
+    { initialEntries: [url] },
+  )
+  render(<QueryClientProvider client={qc}><RouterProvider router={router} /></QueryClientProvider>)
+}
+
+describe('<AvocadoPageEditPage />', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('blog: shows Hero banner fields', async () => {
+    vi.mocked(getAvocadoPage).mockResolvedValue(page('blog') as never)
+    renderAt('/avocado-kiss/pages/pg1')
+    expect(await screen.findByLabelText('Title')).toBeInTheDocument()
+    expect(screen.getByLabelText('Eyebrow')).toBeInTheDocument()
+  })
+  it('home: hides Hero banner (no banner on home)', async () => {
+    vi.mocked(getAvocadoPage).mockResolvedValue(page('home') as never)
+    renderAt('/avocado-kiss/pages/pg1')
+    await screen.findByRole('button', { name: 'Save' })
+    expect(screen.queryByLabelText('Eyebrow')).not.toBeInTheDocument()
+  })
+  it('Save calls updateAvocadoPage', async () => {
+    vi.mocked(getAvocadoPage).mockResolvedValue(page('blog') as never)
+    vi.mocked(updateAvocadoPage).mockResolvedValue(page('blog') as never)
+    renderAt('/avocado-kiss/pages/pg1')
+    await screen.findByLabelText('Title')
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Stories' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(updateAvocadoPage).toHaveBeenCalled())
+  })
+})
+```
+
+- [ ] **Step 8: Тесты, сборка, commit**
+
+Run: `npm --prefix web.admin test -- AvocadoPageEditPage.test` → PASS; `npm --prefix web.admin test` → всё зелёное; `npm --prefix web.admin run build` → OK.
+```bash
+git add src/lib/avocadoPages.ts src/features/pages/AvocadoPagesPage.tsx src/features/pages/AvocadoPageEditPage.tsx src/features/pages/PagesRoutes.tsx src/features/pages/AvocadoPageEditPage.test.tsx src/App.tsx src/config/sites.ts
+git commit -m "feat(pages): avocado-specific Pages editor (hero_* columns) + schema-dispatched /pages route"
+```
+
+---
+
 ## Self-review чек-лист (для исполнителя перед завершением)
 
 - [ ] Каждый из 6 типов блоков: есть в `emptySection`, `sectionToValues`, `rowToSection`,
