@@ -568,41 +568,64 @@ admin_folders). RLS: весь CRUD — только `is_admin()`, публичн
 
 ### admin_folders — папки админки
 
-`id`, `created_at`, `section` (check `'media' | 'recipes'`), `name`,
+`id`, `created_at`, `section` (check `'media' | 'recipes' | 'products'`), `name`,
 `unique(section, name)`; RLS admin-only. `recipes.folder_id` /
-`media.folder_id` — nullable FK, `on delete set null` — удаление папки не
-удаляет элементы. Сайт таблицу не читает.
+`media.folder_id` / `products.folder_id` — nullable FK, `on delete set null` —
+удаление папки не удаляет элементы. Сайт таблицу не читает. (Секция `products`
+добавлена миграцией 0013.)
 
 ### shop_categories — категории Curated Shop
 
 Таксономия товаров магазина, **независима от рецептных `categories`** (другая
-сенсибильность). `id`, `created_at`, `slug` (unique — `/shop/[slug]`; **без
-триггера автогенерации** — задаётся явно при insert), `name`, `item_count`
-(integer, default 0 — «31 items» на карточке хаба; держится согласованным с
-фактическим числом товаров категории при посеве), `position` (порядок сетки
-хаба), `hero_eyebrow`/`hero_title`/`hero_description`/`hero_image_path`
-(nullable — hero страницы категории), `seo_title`/`seo_description`. Публичное
-чтение — все строки; запись — `is_admin()`.
+сенсибильность). `id`, `created_at`, `slug` (unique — `/shop/[slug]`;
+**автоген-триггер `shop_categories_set_slug`** из `name`, если пуст — миграция
+0013), `name`, `item_count` (integer, default 0 — «31 items» на карточке хаба;
+**с 0013 поддерживается автоматически триггером `sync_item_count` на
+`product_categories`** — не вручную), `position` (порядок сетки хаба),
+`hero_eyebrow`/`hero_title`/`hero_description`/`hero_image_path` (nullable — hero
+страницы категории), `seo_title`/`seo_description`. Публичное чтение — все
+строки; запись — `is_admin()`. Связь с товарами — M2M `product_categories` (ниже).
 
 ### products — товары Curated Shop
 
 | Поле | Тип | Назначение |
 |---|---|---|
 | `id`, `created_at` | uuid pk, timestamptz | служебные |
-| `slug` | text (unique, not null) | `/product/[slug]`; **без автоген-триггера** — задаётся явно |
+| `slug` | text (unique, not null) | `/product/[slug]`; **автоген-триггер `products_set_slug`** из `title`, если пуст (0013) |
 | `title` | text (not null) | название |
-| `brand` | text (nullable) | эйброу карточки; текст, без справочника брендов |
+| `brand` | text (nullable) | эйброу карточки; **источник истины для сайта** (фильтр/поиск). Справочник `brands` (0013) — только для пикера админки, `products.brand` остаётся текстом |
 | `price` | numeric(10,2) (not null) | цена; форматируется `formatPrice()` |
 | `description` | text (nullable) | тело страницы товара |
 | `image_path` | text (nullable) | плоский ключ `avocado-kiss-photos` или внешний URL (§4); тестовый сид → null |
 | `referral_url` | text (not null) | «Buy from …» — внешняя ссылка |
-| `category` | text (nullable) | = `shop_categories.slug` (**текст, FK нет** — паттерн `recipes.category`; индекс) |
+| `category` | text (nullable) | **устаревает**: = `shop_categories.slug`. С 0013 связь ведёт M2M `product_categories`; колонка сохранена на время перехода сайта, удаляется отдельной миграцией после переключения `lib/shop.ts` |
+| `folder_id` | uuid (nullable, FK → admin_folders, on delete set null) | папка админки (секция `products`, 0013); сайт не читает |
+| `seo_title` / `seo_description` | text (nullable) | продуктовый SEO (0013); пусто → фолбэк на `title`/`description` |
 
-Индексы: `(category)` и `(created_at desc, id desc)` — детерминированная
-пагинация `.range()` (как cozycorner). `category_name` в типе `Product` —
-**вычисляемое** поле (lookup к `shop_categories.name` по slug), не колонка.
-Товары **не тегируются** (нет `product_tags` — фильтры каталога статичны в v1).
-Публичное чтение — все строки; запись — `is_admin()`.
+Индексы: `(category)`, `(created_at desc, id desc)` (детерминированная пагинация
+`.range()`), `(folder_id)`. `category_name` в типе `Product` — **вычисляемое**
+поле, не колонка. Товары **не тегируются** (нет `product_tags`). Публичное чтение
+— все строки; запись — `is_admin()`.
+
+### product_categories — связь товар↔shop_category (M2M, миграция 0013)
+
+Заменяет чтение текстового `products.category`. `product_id` (FK →
+`products`, on delete cascade), `category_id` (FK → **`shop_categories`**, on
+delete cascade), PK `(product_id, category_id)`, индекс по `category_id`.
+Публичное чтение `using(true)`, запись — `is_admin()`. Backfill из
+`products.category` по **slug** (не name, в отличие от cozy). Триггер
+`sync_item_count` на этой таблице держит `shop_categories.item_count` в синхроне.
+⚠️ FK ссылается на `shop_categories` (магазин), НЕ на рецептные `categories`.
+
+### brands — справочник брендов магазина (миграция 0013)
+
+По образцу `cozycorner.brands`. `id`, `created_at`, `name` (unique), `slug`
+(unique, автоген-триггер `avocado_brands_set_slug`), `position`. Публичное чтение
++ запись `is_admin()`. **FK с `products` нет**: `products.brand` (текст) остаётся
+источником истины для сайта; `brands` — словарь для combobox админки (как у
+cozy). Засеян distinct-значениями `products.brand`. Rename бренда в админке
+каскадит в `products.brand` (app-level) — фильтр категории и поиск по бренду на
+сайте остаются согласованы.
 
 ### shop_editors_picks / product_pairings / product_reading — курация магазина
 
@@ -655,7 +678,16 @@ of the weeknight table» (8 секций). Роуты `/blog`, `/blog/[slug]`; n
 strangers», блоки qa) и roundup («20 pies…», блоки list_item) + теги
 Interview/People/Test Kitchen + автор «The Test Kitchen». · 0010 hero-баннер в
 `pages` (`hero_eyebrow`/`hero_title`/`hero_description`/`hero_image_path` для
-`/shop` и `/blog`) + строка `pages.blog` + сид текущей копии.
+`/shop` и `/blog`) + строка `pages.blog` + сид текущей копии. · 0011 категория
+навигации Dinner (`categories` + `show_in_nav`). · 0012 рейтинги рецептов
+(`recipes` рейтинг-поля, `recipe_ratings`, RPC `rate_recipe`). · **0013 Curated
+Shop — паритет с cozy (аддитивно):** справочник `brands` (сид из distinct
+`products.brand`), M2M `product_categories` (`products`↔`shop_categories`,
+backfill по slug), `products.folder_id` + секция `products` в `admin_folders`
+(расширен CHECK), `products.seo_title`/`seo_description`, slug-триггеры на
+`products`/`shop_categories`, авто-`item_count` (триггер `sync_item_count`).
+`products.category` **сохранён** до переключения сайта (drop — отдельной
+миграцией).
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом
