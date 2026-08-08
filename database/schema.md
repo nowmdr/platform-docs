@@ -504,7 +504,9 @@ Join-таблицы many-to-many: `(recipe_id|post_id, tag_id)` PK + `position`
 default essay — управляет вариантом hero/лэйаута), `author_id` (FK → authors),
 `subtitle` (dek), `read_minutes` (int, «N min read»), `seo_title`,
 `seo_description`. Миграция 0009 добавила `hero_caption` (подпись hero-фигуры для
-roundup). Публичное чтение — только опубликованные; запись — админ.
+roundup). Миграция 0015 добавила `folder_id` (nullable FK → admin_folders, on
+delete set null — папка админки для раздела Blog в web.admin; сайт поле не читает).
+Публичное чтение — только опубликованные; запись — админ.
 Архив `/blog`, single `/blog/[slug]`. Загрузчики — `lib/blog.ts`.
 
 ### authors — авторы постов (миграция 0008)
@@ -568,11 +570,11 @@ admin_folders). RLS: весь CRUD — только `is_admin()`, публичн
 
 ### admin_folders — папки админки
 
-`id`, `created_at`, `section` (check `'media' | 'recipes' | 'products'`), `name`,
+`id`, `created_at`, `section` (check `'media' | 'recipes' | 'products' | 'posts'`), `name`,
 `unique(section, name)`; RLS admin-only. `recipes.folder_id` /
-`media.folder_id` / `products.folder_id` — nullable FK, `on delete set null` —
+`media.folder_id` / `products.folder_id` / `posts.folder_id` — nullable FK, `on delete set null` —
 удаление папки не удаляет элементы. Сайт таблицу не читает. (Секция `products`
-добавлена миграцией 0013.)
+добавлена миграцией 0013; `posts` — миграцией 0015.)
 
 ### shop_categories — категории Curated Shop
 
@@ -690,7 +692,9 @@ backfill по slug), `products.folder_id` + секция `products` в `admin_fo
 `products`/`shop_categories`, авто-`item_count` (триггер `sync_item_count`).
 · **0014 очистка:** drop `products.category` + индекс — после перевода сайта
 (`lib/shop.ts`) и скилла `avocado-content-ops` на M2M. Данные категории — в
-`product_categories`.
+`product_categories`. · **0015 posts.folder_id** (nullable FK → admin_folders, on
+delete set null) + секция `'posts'` в `admin_folders.section` CHECK — папки блога в
+web.admin (по образцу cozy 0022). Аддитивно; сайт `posts.folder_id` не читает.
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом
