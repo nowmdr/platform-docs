@@ -822,12 +822,12 @@ export function toInput(site: SiteConfig, v: ArticleFormValues): ArticleInput {
   }
 }
 
-export function toSections(v: ArticleFormValues): ArticleSection[] {
+export function toSections(site: SiteConfig, v: ArticleFormValues): ArticleSection[] {
   return v.sections.map((s): ArticleSection => {
     switch (s.kind) {
       case 'text': return { kind: 'text', sectionId: s.sectionId, isPublished: s.isPublished, body: s.body, variant: s.variant }
       case 'quote': return { kind: 'quote', sectionId: s.sectionId, isPublished: s.isPublished, quote: s.quote, attribution: orNull(s.attribution) }
-      case 'image': return { kind: 'image', sectionId: s.sectionId, isPublished: s.isPublished, imagePath: orNull(s.imagePath), caption: orNull(s.caption), credit: orNull(s.credit) }
+      case 'image': return { kind: 'image', sectionId: s.sectionId, isPublished: s.isPublished, imagePath: orNull(toStoragePath(site, s.imagePath.trim())), caption: orNull(s.caption), credit: orNull(s.credit) }
       case 'recipe_card': return { kind: 'recipe_card', sectionId: s.sectionId, isPublished: s.isPublished, recipeId: orNull(s.recipeId), eyebrow: orNull(s.eyebrow) }
       case 'qa': return { kind: 'qa', sectionId: s.sectionId, isPublished: s.isPublished, question: s.question, answer: s.answer }
       case 'list_item': {
@@ -936,7 +936,7 @@ describe('toInput', () => {
 
 describe('toSections', () => {
   it('list_item: rank string → number, empty optionals → null', () => {
-    const [s] = toSections({ ...baseValues, sections: [emptySection('list_item')] })
+    const [s] = toSections(site, { ...baseValues, sections: [emptySection('list_item')] })
     expect(s).toMatchObject({ kind: 'list_item', rank: null, heading: '', body: null, recipeId: null })
   })
 })
@@ -1812,7 +1812,7 @@ function ArticleForm({ site, data }: { site: SiteConfig; data: ArticleWithRelati
   const save = useMutation({
     mutationFn: async (values: ArticleFormValues) => {
       const input = toInput(site, values)
-      const sections = toSections(values)
+      const sections = toSections(site, values)
       const tagIds = values.tagIds
       const related: RelatedPin[] = toRelated(values)
       if (isNew) return { created: await createArticle(site, input, sections, tagIds, related), fresh: null }
