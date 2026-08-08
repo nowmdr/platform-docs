@@ -15,8 +15,10 @@ avocado_kiss).
 > репозитория).
 
 Фаза A (сайт + БД) реализована и жива; интеграция с общей админкой
-`web.admin` — **фаза B**, отдельная задача, ещё не начата. Сейчас курирование
-главной и правка контента возможны только напрямую через БД.
+`web.admin` — **фаза B**, идёт по разделам. Готово: **Media** + **Curated Shop**
+(Products / Categories = `shop_categories` / Brands). Ещё не в админке:
+курирование главной (`home_slots`), Recipes, Pages, Footer — правятся напрямую
+через БД / коннектор-скилл.
 
 ## 1. Структура репозитория
 
@@ -284,10 +286,11 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
 - **Деплой на Vercel ещё не настроен** — прод-URL pending. Когда появится
   проект на Vercel: связать с GitHub-репозиторием, задать те же переменные
   окружения (Production + Preview), `NEXT_PUBLIC_SITE_URL` — реальным доменом.
-- Интеграция с общей админкой `web.admin` — **фаза B**, отдельная задача:
-  запись в `SITES` (`web.admin/src/config/sites.ts`, slug `avocado-kiss`),
-  секции Recipes/Categories/Home (пикер по слотам)/Pages/Footer/Media.
-  Контракт БД под неё уже спроектирован (см. schema.md).
+- Интеграция с общей админкой `web.admin` — **фаза B**, по разделам. Сделано:
+  запись в `SITES` (slug `avocado-kiss`, `sections` allowlist), разделы **Media**
+  и **Curated Shop** (Products / Categories = `shop_categories` / Brands — на
+  generic-коде cozy, site-aware по `site.schema`). Осталось: Recipes, Home (пикер
+  слотов), Pages, Footer. Контракт БД — schema.md; план — `plans/2026-08-08-*`.
 
 ## 8. Curated Shop (раздел магазина)
 

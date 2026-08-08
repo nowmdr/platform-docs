@@ -97,6 +97,22 @@
     `refetchOnWindowFocus:false` + `staleTime:Infinity` (свежесть через
     `onAuthStateChange`). Детали — [api.md](api.md) §3.
   - Мелочь: пункты поповера `TaxonomyCombobox` — `cursor-pointer` + единый инсет.
+- **Второй сайт Avocado Kiss (2026-08-08)** — мультисайтовость админки задействована:
+  - **Media** для avocado: запись в `SITES` (schema `avocado_kiss`, bucket
+    `avocado-kiss-photos`) + новый allowlist `SiteConfig.sections` (nav показывает
+    только готовые разделы); `USAGE_SOURCES` в `src/lib/media.ts` сделан site-aware
+    (map по схеме). БД (`media`/`admin_folders`/бакет) уже была готова — миграций нет.
+  - **Curated Shop** для avocado (Products / Categories=`shop_categories` / Brands)
+    на **том же generic-коде**, site-aware по `site.schema`:
+    `src/lib/categories.ts` — модель по схеме (`categories` vs `shop_categories`),
+    картинка нормализована к каноничному `image_path` (PostgREST-alias
+    `image_path:hero_image_path`), поле `hero_eyebrow` (avocado); `CategoryEditDialog`
+    — условный `hero_eyebrow`; `products.image_style` — cozycorner-only (не шлётся
+    для avocado). `product_categories`/`brands`/`productCategories.ts`/`brands.ts`/
+    `TaxonomyManager`/`CategoryChipsField` — без изменений (общие таблицы). Роуты
+    `App.tsx` уже работали для любого `:siteSlug` — включение = allowlist. БД под
+    Shop — миграции avocado `0013`/`0014` (M2M/brands/folders/триггеры). Cozy-тесты
+    (50) зелёные — регресса нет.
 
 ## Отклонения от спеки (актуальные версии инструментов)
 
