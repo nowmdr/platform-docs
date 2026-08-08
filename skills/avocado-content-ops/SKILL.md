@@ -24,7 +24,9 @@ source of truth for exact structure.**
 The schema evolves (new columns, new content types — the **Blog (Article)**
 model — `posts` + `authors` + `post_sections` + `post_related` — shipped in
 migrations `0008`/`0009`; the **Curated Shop** — `products` + `shop_categories`
-+ three shop curation tables — shipped in migration `0007`). So:
++ three shop curation tables — shipped in migration `0007`, then brought to
+CozyCorner parity in `0013`/`0014`: M2M `product_categories`, `brands` vocabulary,
+trigger-managed `item_count`, slug triggers, dropped the old `products.category`). So:
 
 - **Before writing anything, inspect the real table** through the connector
   (`list_tables` with schema `avocado_kiss`, or `select * from
@@ -62,11 +64,12 @@ Things that matter for how you operate:
   (safe), **but `posts.is_published` and `home_slots.is_published` default to
   `true`** — a new post or home-slot goes **live immediately** unless you
   explicitly set `is_published = false`. Always set it explicitly.
-  ⚠️ **The Curated Shop has NO draft state at all.** None of the five shop tables
-  (`products`, `shop_categories`, `shop_editors_picks`, `product_pairings`,
-  `product_reading`) has an `is_published` column — they are public-read. **A
-  product or curation row is live the instant you insert it.** Tell the user that
-  before you create shop content, and confirm per §6.
+  ⚠️ **The Curated Shop has NO draft state at all.** None of the shop tables
+  (`products`, `shop_categories`, `product_categories`, `brands`,
+  `shop_editors_picks`, `product_pairings`, `product_reading`) has an
+  `is_published` column — they are public-read. **A product, membership or curation
+  row is live the instant you insert it.** Tell the user that before you create
+  shop content, and confirm per §6.
 - **The home page is curated, not queried.** It is assembled from `home_slots`
   rows, not from "latest N recipes". Putting a recipe on the home page = adding
   a `home_slots` row (§3, §7).
@@ -108,11 +111,15 @@ them — they are how the data stays consistent.
     real `tags.id` (foreign keys, `on delete cascade`). To tag a recipe, insert
     `(recipe_id, tag_id, position)` rows — never a text field. Query real
     `tags.id` first; never invent ids.
-  - **Shop products link to their category by SLUG** (a third style — don't
-    confuse it with recipes). `products.category` (single text field) equals a
-    `shop_categories.slug` — **by slug, not by name**. No FK — a string match. Set
-    it to an existing `shop_categories.slug` or the product shows under no
-    category. (`shop_categories.name` is only the display label — never the key.)
+  - **Shop products link to their category by FK, many-to-many** (migration
+    `0013`, mirrors CozyCorner). A product belongs to 0..N shop categories via the
+    **`product_categories`** join table — rows `(product_id, category_id)`, both FK
+    (`on delete cascade`), `category_id` → **`shop_categories.id`** (NOT the recipe
+    `categories`). To categorise a product, insert `(product_id, category_id)` rows
+    referencing real ids — never a text field. The old single-text
+    `products.category` column was **dropped** (0014). The site's product page uses
+    the **primary** category = the membership whose `shop_categories.position` is
+    lowest.
 - **Categories ≠ tags** (they look similar but are different sensibilities):
   - **Categories** are the recipe's *section* (Breakfast, Seasonal, Seafood…),
     shown on cards and driving `/category/[slug]` archives and header nav.
@@ -146,12 +153,11 @@ them — they are how the data stays consistent.
   string match** (no FK).
 - **The database owns `slug`, `created_at`, `updated_at`.** Triggers generate
   `slug` from `title`/`name` (via `public.slugify`) and maintain timestamps.
-  **Never send these on insert.** **Exception — the Curated Shop tables have no
-  such triggers.** `products` and `shop_categories` have **no slug trigger and no
-  `updated_at` column**; `slug` is `NOT NULL UNIQUE` with no default, so you
-  **must supply it yourself** — compute it explicitly (`select
-  public.slugify('Speckled Dinner Plate')`) and check it isn't already taken
-  before inserting. (The shop curation tables have no slug at all.)
+  **Never send these on insert.** Since `0013` this includes the Curated Shop:
+  `products`, `shop_categories` (and `brands`) have slug triggers — omit `slug`
+  and it is generated from `title`/`name`; you may still pass an explicit slug if
+  you need a specific one. `products`/`shop_categories` have **no `updated_at`
+  column**. (The shop curation and `product_categories` tables have no slug.)
 - **Empty optional fields are `null`, never empty strings.** Empty SEO/eyebrow/
   description fields intentionally fall back to code defaults.
 - **Publication gating.** `is_published` controls visibility; the public site
@@ -210,10 +216,11 @@ When in doubt, **prefer reading over writing**, and ask.
 2. **Resolve dependencies with SELECTs first**: real `recipes.id` /
    `posts.id` / `tags.id` / `products.id` values, existing `categories.name` /
    `shop_categories.slug` (so you match, not duplicate), existing slugs/titles
-   (avoid duplicates — and for shop, compute the new `slug` and check it's free),
-   `media.path` for images, and — for home-page or shop-curation work — the
-   current rows in the target `slot` or curation table (and the category's
-   `item_count` if you're adding/removing a product).
+   (avoid duplicates), `media.path` for images, and — for home-page or
+   shop-curation work — the current rows in the target `slot` or curation table.
+   To categorise a product, resolve the `shop_categories.id` and insert a
+   `product_categories` row — **do not touch `item_count`** (a trigger maintains
+   it).
 3. **Show the preview**: target `schema.table`, the operation, and the exact
    field values (or the SQL / connector call you'll run). For a home-page
    placement, show the `home_slots` row (slot, position, recipe_id/post_id,
@@ -330,35 +337,46 @@ are in schema `avocado_kiss`.
     capture its `id` → ③ insert **post_tags** → ④ insert **post_sections** in
     `position` order (0,1,2,…) with the correct columns per `type` → ⑤ optional
     **post_related**. Report the generated slug and `/blog/<slug>`.
-- **Curated Shop** (5 tables, migration `0007`) — the affiliate storefront:
-  routes `/shop`, `/shop/[category]`, `/product/[slug]`; products link out to
-  where you buy them. It does **not** follow every recipe convention — the two
-  shop-wide rules from §1/§3 apply to all five tables: **(a) no draft state** (no
-  `is_published` anywhere — a row is live on insert), and **(b) you supply
-  `slug`** on `products`/`shop_categories` (no trigger). Details per entity:
-  - **products** — the storefront items. Columns: `slug` (`NOT NULL UNIQUE` — you
-    supply it via `slugify`), `title` (NOT NULL), `price` (`numeric`, NOT NULL — a
-    bare number like `32.00`, no currency symbol; the site formats it),
-    `referral_url` (NOT NULL — the outbound "Buy from …" link), `brand` (nullable
-    — card eyebrow, e.g. "Clay & Co."), `description` (nullable — product-page
-    body), `image_path` (nullable — same flat-key/external-URL contract as recipe
-    `hero_image_path`, bucket `avocado-kiss-photos`; empty → placeholder),
-    `category` (nullable text = a `shop_categories.slug` — **by slug, not name**,
-    §3). No `is_published`, no `updated_at`. Adding/removing a product → **update
-    the category's `item_count`** (see below).
+- **Curated Shop** (7 tables; base `0007`, parity with cozy `0013`/`0014`) — the
+  affiliate storefront: routes `/shop`, `/shop/[category]`, `/product/[slug]`;
+  products link out to where you buy them. Shop-wide rule: **no draft state** (no
+  `is_published` anywhere — a row is live on insert). **`slug` is auto-generated by
+  a trigger** on `products` and `shop_categories` (from `title`/`name` if you omit
+  it — added in `0013`); you may still pass an explicit slug. Details per entity:
+  - **products** — the storefront items. Columns: `slug` (UNIQUE; auto from `title`
+    if omitted), `title` (NOT NULL), `price` (`numeric`, NOT NULL — a bare number
+    like `32.00`, no currency symbol; the site formats it), `referral_url` (NOT
+    NULL — the outbound "Buy from …" link), `brand` (nullable text — card eyebrow,
+    e.g. "Clay & Co."; still the **source of truth** — see brands below),
+    `description` (nullable — product-page body), `image_path` (nullable — same
+    flat-key/external-URL contract as recipe `hero_image_path`, bucket
+    `avocado-kiss-photos`; empty → placeholder), `seo_title`/`seo_description`
+    (nullable — added 0013; empty → falls back to title/description),
+    `folder_id` (admin-only; leave null). **No `category` column** (dropped 0014) —
+    category membership is via **`product_categories`** (below). No `is_published`,
+    no `updated_at`.
+  - **product_categories** (M2M, `0013`) — product↔shop_category membership. Row =
+    `(product_id, category_id)`, both FK (`category_id` → **`shop_categories.id`**),
+    PK both. To put a product in a category, insert a row with real ids (resolve
+    them with a SELECT first). A product may be in several categories. `item_count`
+    is kept in sync **automatically by a trigger** — do NOT touch it (below).
+  - **brands** (vocabulary, `0013`) — `name` (unique), `slug` (auto), `position`.
+    Mirrors cozy: this is a **picker vocabulary for the admin app**; the site reads
+    `products.brand` (text) directly, so `products.brand` stays the source of truth
+    for the brand filter and site search. When you set a product's `brand` to a new
+    value, you *may* also add a `brands` row so the admin picker lists it, but the
+    site works from `products.brand` alone.
   - **shop_categories** — the storefront sections (`/shop/[slug]`). Columns:
-    `slug` (`NOT NULL UNIQUE` — you supply it), `name` (NOT NULL — display, e.g.
-    "Ceramics & Table"), `position` (grid/order), `item_count` (NOT NULL —
-    ⚠️ see cascade), optional `hero_eyebrow`/`hero_title`/`hero_description`/
-    `hero_image_path` (category-page hero; empty → code fallbacks), optional
-    `seo_title`/`seo_description`.
-  - **⚠️ `shop_categories.item_count` is a STORED counter you keep in sync.** It
-    is a plain column (no trigger); the hub `/shop` prints it as "N items". After
-    any add/remove of a product in a category, set that category's `item_count` to
-    the real number: `select count(*) from avocado_kiss.products where category =
-    '<slug>'`. This cascade is yours to own — like renaming a category cascades to
-    `recipes.category`. (Moving it to a trigger is a future migration, not a
-    connector edit.)
+    `slug` (UNIQUE; auto from `name` if omitted), `name` (NOT NULL — display, e.g.
+    "Ceramics & Table"), `position` (grid/order), `item_count` (**trigger-managed —
+    do NOT set**, see below), optional `hero_eyebrow`/`hero_title`/
+    `hero_description`/`hero_image_path` (category-page hero; empty → code
+    fallbacks), optional `seo_title`/`seo_description`.
+  - **✅ `shop_categories.item_count` is now trigger-maintained (`0013`).** A trigger
+    on `product_categories` recomputes it on every membership insert/update/delete,
+    so the hub `/shop` "N items" is always correct. **Do not set `item_count`
+    manually** — just insert/delete the `product_categories` row and the count
+    follows. (This replaces the old manual cascade.)
   - **shop_editors_picks** — the "Editors' picks this month" strip on `/shop`.
     Row = `(product_id, position)`. **`UNIQUE(product_id)`** — a product can be a
     pick at most once. To feature: `select` current picks for a free `position`,
@@ -432,12 +450,17 @@ Use these to answer "what do we have" and to ground writes:
   avocado_kiss.tags t on t.id = pt.tag_id where pt.post_id = '<id>' order by
   pt.position;`
 - Authors: `select id, name, slug from avocado_kiss.authors order by name;`
-- Shop catalog: `select p.title, p.brand, p.price, p.category, p.slug from
+- Shop catalog: `select p.title, p.brand, p.price, p.slug from
   avocado_kiss.products p order by p.created_at desc limit 50;`
-- Shop categories + live counts (spot `item_count` drift): `select c.slug,
-  c.name, c.position, c.item_count, (select count(*) from avocado_kiss.products p
-  where p.category = c.slug) as actual from avocado_kiss.shop_categories c order
-  by c.position;`
+- A product's categories (M2M): `select c.name from avocado_kiss.product_categories pc
+  join avocado_kiss.shop_categories c on c.id = pc.category_id where pc.product_id =
+  '<id>' order by c.position;`
+- Shop categories + counts (item_count is trigger-managed; this just reads it):
+  `select c.slug, c.name, c.position, c.item_count, (select count(*) from
+  avocado_kiss.product_categories pc where pc.category_id = c.id) as actual from
+  avocado_kiss.shop_categories c order by c.position;` (item_count and actual should
+  always match — if not, the trigger was bypassed by a raw insert.)
+- Brands vocabulary: `select name, position from avocado_kiss.brands order by name;`
 - Current Editors' picks: `select ep.position, p.title from
   avocado_kiss.shop_editors_picks ep join avocado_kiss.products p on p.id =
   ep.product_id order by ep.position;`

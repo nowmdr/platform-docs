@@ -293,10 +293,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
 
 Куратируемый магазин: сетка категорий + товары + карточки товара со связанной
 курацией. Собственная таксономия (`shop_categories`), товары в `products`,
-курация тремя join-таблицами (schema.md §9). Данные — `lib/shop.ts` (загрузчики
-поверх Supabase; **не** `server-only` — `ProductGrid` вызывает
-`fetchProductsPage` из браузера для Load more). Типы — `lib/types.ts`
-(`Product`, `ShopCategory`, `ReadingItem`, `SHOP_PAGE_SIZE = 9`).
+связь товар↔категория — **M2M `product_categories`** (миграция 0013, паритет с
+cozy; старая текстовая `products.category` удалена в 0014), курация тремя
+join-таблицами (schema.md §9). Данные — `lib/shop.ts` (загрузчики поверх
+Supabase; **не** `server-only` — `ProductGrid` вызывает `fetchProductsPage` из
+браузера для Load more). Типы — `lib/types.ts` (`Product`, `ShopCategory`,
+`ReadingItem`, `SHOP_PAGE_SIZE = 9`).
 
 **Маршруты (все SSG + ISR `revalidate = 60`):**
 
@@ -322,17 +324,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…   # публичный ключ
   детерминирован (`created_at desc, id desc`); сортировки по цене — `price` +
   вторичный ключ `id desc`.
 - `/product/[slug]` — страница товара (`generateStaticParams` ←
-  `fetchProductSlugs`): `ProductDetail` (`fetchProductBySlug`, `category_name`
-  для эйброу/бэклинка достраивается lookup'ом к `shop_categories`) +
+  `fetchProductSlugs`): `ProductDetail` (`fetchProductBySlug`; эйброу/бэклинк —
+  **главная категория** товара, наименьший `position` из M2M) +
   «Pairs well with» (`fetchProductPairings` → 3 товара, без само-ссылки) +
   «Related reading» (`fetchRelatedReading` → 3 **опубликованных** рецепта).
 
 **Курация:** `fetchRelatedReading` embed'ит `recipes!inner` +
 `eq('recipe.is_published', true)` — неопубликованные рецепты в блок не
 протекают (паттерн `fetchHomeSlots`); проекция рецепта → `ReadingItem`
-(`href=/recipes/{slug}`). Связь товар→категория — **текстовая**
-(`products.category = shop_categories.slug`, без FK), поэтому `category_name`
-достраивается отдельным запросом, а не PostgREST-embed'ом.
+(`href=/recipes/{slug}`). Связь товар↔категория — **M2M `product_categories`**
+(→ `shop_categories`): `fetchProductsPage` фильтрует категорию через membership
+(`slug → id → product_id`, затем `.in("id", …)`), `attachCategoryNames` достраивает
+главную категорию (`primaryCategory`, наименьший `position`), а
+`fetchShopFilterOptions` берёт бренды товаров категории тем же путём.
+`shop_categories.item_count` держит триггер `sync_item_count`. Бренд остаётся
+текстом `products.brand` (справочник `brands` — только для пикера админки), поэтому
+фильтр и поиск по бренду читают `products.brand` напрямую.
 
 **Картинки товаров:** бакет `avocado-kiss-photos` (§4), `products.image_path` /
 `shop_categories.hero_image_path`; разбор — `resolveProductImage()`. Тестовый

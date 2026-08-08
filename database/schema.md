@@ -598,14 +598,16 @@ admin_folders). RLS: весь CRUD — только `is_admin()`, публичн
 | `description` | text (nullable) | тело страницы товара |
 | `image_path` | text (nullable) | плоский ключ `avocado-kiss-photos` или внешний URL (§4); тестовый сид → null |
 | `referral_url` | text (not null) | «Buy from …» — внешняя ссылка |
-| `category` | text (nullable) | **устаревает**: = `shop_categories.slug`. С 0013 связь ведёт M2M `product_categories`; колонка сохранена на время перехода сайта, удаляется отдельной миграцией после переключения `lib/shop.ts` |
 | `folder_id` | uuid (nullable, FK → admin_folders, on delete set null) | папка админки (секция `products`, 0013); сайт не читает |
 | `seo_title` / `seo_description` | text (nullable) | продуктовый SEO (0013); пусто → фолбэк на `title`/`description` |
 
-Индексы: `(category)`, `(created_at desc, id desc)` (детерминированная пагинация
-`.range()`), `(folder_id)`. `category_name` в типе `Product` — **вычисляемое**
-поле, не колонка. Товары **не тегируются** (нет `product_tags`). Публичное чтение
-— все строки; запись — `is_admin()`.
+Связь с категориями — M2M `product_categories` (ниже). Текстовая колонка
+`products.category` **удалена** миграцией 0014 (данные перенесены в
+`product_categories`). Индексы: `(created_at desc, id desc)` (детерминированная
+пагинация `.range()`), `(folder_id)`. `category`/`category_name` в типе `Product`
+(сайт) — **вычисляемые** (главная категория = наименьший `position` из M2M), не
+колонки. Товары **не тегируются** (нет `product_tags`). Публичное чтение — все
+строки; запись — `is_admin()`.
 
 ### product_categories — связь товар↔shop_category (M2M, миграция 0013)
 
@@ -686,8 +688,9 @@ Shop — паритет с cozy (аддитивно):** справочник `br
 backfill по slug), `products.folder_id` + секция `products` в `admin_folders`
 (расширен CHECK), `products.seo_title`/`seo_description`, slug-триггеры на
 `products`/`shop_categories`, авто-`item_count` (триггер `sync_item_count`).
-`products.category` **сохранён** до переключения сайта (drop — отдельной
-миграцией).
+· **0014 очистка:** drop `products.category` + индекс — после перевода сайта
+(`lib/shop.ts`) и скилла `avocado-content-ops` на M2M. Данные категории — в
+`product_categories`.
 
 Ручной шаг после 0001: схема `avocado_kiss` добавлена в **Exposed schemas**
 (готово). Картинки-заглушки для сида загружаются в бакет отдельным шагом
